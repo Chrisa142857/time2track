@@ -259,6 +259,7 @@ details.fold > summary { cursor: pointer; font: 650 var(--step-0)/1.4 var(--font
 .ramp-legend { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; flex-wrap: wrap; }
 .ramp-legend i { display: block; width: 9rem; height: 0.6rem; border-radius: 2px; background: linear-gradient(90deg, #2f6bd8, #2aa198, #8a9a2b, #d08a1e, #c4512b); }
 .viewer-msg { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font: 400 0.85rem var(--font-mono); color: var(--stage-muted); pointer-events: none; }
+[hidden] { display: none !important; }   /* author display rules (e.g. .viewer-msg) would otherwise override the hidden attribute */
 .viewer-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem 1.5rem; align-items: center; }
 
 .facts { max-width: var(--wide); margin: 0 auto; padding: 1.6rem 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem 2rem; }
