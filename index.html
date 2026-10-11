@@ -425,7 +425,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
   </figure>
   <figure>
     <div class="cohort" id="chart-cohort"></div>
-    <div class="ramp-legend"><span class="note">true end-systole</span><span class="mono" id="ramp-lo"></span><i></i><span class="mono" id="ramp-hi"></span></div>
+    <div class="ramp-legend"><span class="note"><span id="cohort-n"></span> validation subjects, one line each, coloured by true end-systole</span><span class="mono" id="ramp-lo"></span><i></i><span class="mono" id="ramp-hi"></span></div>
   </figure>
 
 <div class="facts heart-facts">
@@ -472,7 +472,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
   </figure>
   <figure>
     <div class="cohort" id="h-cohort"></div>
-    <div class="ramp-legend"><span class="note">true joint onset spread</span><span class="mono" id="h-ramp-lo"></span><i></i><span class="mono" id="h-ramp-hi"></span></div>
+    <div class="ramp-legend"><span class="note"><span id="h-cohort-n"></span> test cycles, one line each, coloured by true joint onset spread</span><span class="mono" id="h-ramp-lo"></span><i></i><span class="mono" id="h-ramp-hi"></span></div>
   </figure>
   <div class="facts heart-facts">
     <div class="fact"><b class="num">24,974</b><span>sEMG recordings with motion-capture hand pose (emg2pose), each with a usable gesture cycle</span></div>
@@ -1231,9 +1231,10 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
 
     function drawCohort(meta) {
       const c = meta.cohort, F = meta.frames, MS = meta.ms_per_frame, M = meta.models.length;
+      document.getElementById('cohort-n').textContent = c.n.toLocaleString('en-US');
       document.getElementById('ramp-lo').textContent = ES_LO * MS + ' ms';
       document.getElementById('ramp-hi').textContent = ES_HI * MS + ' ms';
-      const W = 1100, H = 300, PL = 46, gap = 24, T = 28, B = 36, lo = -70, hi = 20;
+      const W = 1100, H = 300, PL = 64, gap = 24, T = 28, B = 36, lo = -70, hi = 20;
       const pw = (W - PL - gap * (M - 1) - 6) / M;
       const y = v => T + ((hi - v) / (hi - lo)) * (H - T - B);
       const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Heart volume curves of ${c.n} validation subjects for each model, coloured by true end-systole time` }, document.getElementById('chart-cohort'));
@@ -1249,6 +1250,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
         }
         for (const ms of [0, 500, 1000, 1500]) text(svg, x(ms / MS), H - B + 16, ms, { 'text-anchor': 'middle' });
         if (m === 0) text(svg, x0, H - 4, 'time (ms)');
+        if (m === 0) text(svg, 0, 0, 'heart volume change (% of rest)', { 'text-anchor': 'middle', transform: `translate(12,${((T + H - B) / 2).toFixed(1)}) rotate(-90)` });
         const g = el('g', { 'clip-path': `url(#cohort-clip-${m})` }, svg);
         const vals = new Int16Array(b64(c.volume_pct[name]));
         for (let i = 0; i < c.n; i++) {
@@ -1262,15 +1264,16 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
 
     function drawGap(meta) {
       const sp = meta.overlay.gap_mm, F = meta.frames, MS = meta.ms_per_frame;
-      const W = 720, H = 250, L = 46, R = 14, T = 34, B = 36, hi = Math.ceil(Math.max(...sp.flat()));
+      const W = 720, H = 250, L = 62, R = 14, T = 34, B = 36, hi = Math.ceil(Math.max(...sp.flat()));
       const x = f => L + (f / (F - 1)) * (W - L - R), y = v => T + (1 - v / hi) * (H - T - B);
       const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Distance between the average motion of early and late subjects over the cardiac cycle for each model' }, document.getElementById('chart-spread'));
       for (let v = 0; v <= hi; v++) {
         el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v ? 'gridline' : 'axis' }, svg);
-        text(svg, L - 8, y(v) + 4, v + (v === hi ? ' mm' : ''), { 'text-anchor': 'end' });
+        text(svg, L - 8, y(v) + 4, v, { 'text-anchor': 'end' });
       }
       for (let ms = 0; ms <= 1500; ms += 250) text(svg, x(ms / MS), H - B + 18, ms, { 'text-anchor': 'middle' });
       text(svg, (L + W - R) / 2, H - 4, 'time (ms)', { 'text-anchor': 'middle' });
+      text(svg, 0, 0, 'early–late gap (mm)', { 'text-anchor': 'middle', transform: `translate(14,${((T + H - B) / 2).toFixed(1)}) rotate(-90)` });
       [2, 0, 1].forEach(m => el('path', { d: sp[m].map((v, f) => (f ? 'L' : 'M') + x(f).toFixed(1) + ' ' + y(v).toFixed(1)).join(''), class: LINE_CLS[m] }, svg));
       meta.models.forEach((n, m) => {
         const lx = L + m * 200;
@@ -1497,7 +1500,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
       /* cohort: fraction of joints started over time, every lockstep and staggered cycle, coloured by true onset spread */
       (function drawCohort() {
         const c = D.cohort, ON = {}; for (const k of SRC) ON[k] = b64(c.onsets[k]);
-        document.getElementById('h-ramp-lo').textContent = SP_LO + ' ms'; document.getElementById('h-ramp-hi').textContent = SP_HI + ' ms';
+        document.getElementById('h-cohort-n').textContent = c.n.toLocaleString('en-US'); document.getElementById('h-ramp-lo').textContent = SP_LO + ' ms'; document.getElementById('h-ramp-hi').textContent = SP_HI + ' ms';
         const W = 1100, H = 300, PL = 46, gp = 24, T = 28, B = 36, pw = (W - PL - gp * (M - 1) - 6) / M;
         const y = v => T + (1 - v) * (H - T - B), colors = c.true_spread_ms.map(rampColor);
         const order = [...Array(c.n).keys()].sort((p, q) => c.true_spread_ms[p] - c.true_spread_ms[q]);
