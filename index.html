@@ -92,6 +92,10 @@ p { margin: 0; }
 .hero { border-bottom: 1px solid var(--rule); }
 .hero-inner { max-width: var(--wide); margin: 0 auto; padding: 3.5rem 16px 1.5rem; display: grid; gap: 1.4rem; }
 .hero h1 { font-size: var(--step-4); font-weight: 800; font-stretch: 78%; letter-spacing: -0.02em; line-height: 0.95; }
+.hero .paper-title { font: 600 var(--step-1)/1.3 var(--font-display); font-stretch: 92%; max-width: 46rem; color: var(--ink); }
+details.fold.abstract { margin: 0; max-width: 46rem; background: var(--paper); }
+details.fold.abstract p { margin-top: 0.7rem; font-size: 0.95rem; line-height: 1.6; }
+.bibtex { margin: 0; padding: 0.9rem 1rem; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; overflow-x: auto; font: 400 0.78rem/1.5 var(--font-mono); color: var(--ink); white-space: pre; }
 .hero .meta { display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem; align-items: center; font: 400 0.82rem/1.4 var(--font-mono); color: var(--muted); }
 .btn {
   display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.9rem;
@@ -384,6 +388,11 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
   <div class="hero-inner">
     <p class="eyebrow">NeurIPS 2026 · Ziquan Wei, Tingting Dan, Guorong Wu</p>
     <h1>Time2Track</h1>
+    <p class="paper-title">From Heartbeat to Cardiochoreography: A Mechanics Foundation Model for Individualized 4D Cardiac Motion Generation Conditioned on Electrophysiology</p>
+    <details class="fold abstract">
+      <summary>Abstract</summary>
+      <p>The electrocardiogram (ECG) is a time series that records the electrical activity driving cardiac motion through electromechanical coupling (EMC), where the depolarization captured by ECG triggers each heartbeat. The temporal delay and low spatial resolution of such multichannel dynamic data often cause temporal and spatial misalignments along the physical motion, limiting the application of ECG data to event/segment-based downstream clinic practice. Although many efforts have been made to recover spatiotemporal trajectories conditioned on ECG waveforms, the intrinsic principle of EMC that results in various temporal delays remains underexplored in current generative models. To address this limitation, we propose Time2Track, a delay-aware generative model that generates individualized 4D heart motion from same-day ECG recordings by encoding electrophysiology as delay-aware token embeddings. Specifically, a learnable wavelet decomposition is employed to characterize the electromechanical delay, which is then formulated as a physics-based conditioning signal for motion diffusion. Time2Track generates 4D motion with individual-specific kinematics, avoiding the collapse to a population average, i.e., a common failure scenario when diffusing motions whose inter-subject differences are subtle. On <i>n</i>&nbsp;=&nbsp;40,577 subjects from the UK Biobank, our Time2Track accurately synthesizes 4D cardiac trajectories from ECG and preserves inter-subject diversity, a regime in which generic motion diffusion baselines collapse to a population average.</p>
+    </details>
     <div class="meta">
       <a class="btn" href="https://github.com/Chrisa142857/time2track">Code (GitHub)</a>
       <span>UK Biobank · 40,462 ECG–mesh pairs</span>
@@ -755,6 +764,13 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
 <footer>
   <p><b>Data.</b> UK Biobank data are available to approved researchers at ukbiobank.ac.uk, and the subjects shown on this page carry no identifiers.</p>
   <p><b>Code.</b> <a href="https://github.com/Chrisa142857/time2track">github.com/Chrisa142857/time2track</a>. Built on the PhysCtrl motion diffusion implementation.</p>
+  <p><b>BibTeX.</b></p>
+  <pre class="bibtex">@inproceedings{wei2026time2track,
+  title     = {From Heartbeat to Cardiochoreography: A Mechanics Foundation Model for Individualized 4D Cardiac Motion Generation Conditioned on Electrophysiology},
+  author    = {Wei, Ziquan and Dan, Tingting and Wu, Guorong},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year      = {2026}
+}</pre>
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
