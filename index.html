@@ -258,6 +258,7 @@ details.fold > summary { cursor: pointer; font: 650 var(--step-0)/1.4 var(--font
 .cohort .playhead { stroke: var(--ink); stroke-width: 1; opacity: 0.5; }
 .ramp-legend { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; flex-wrap: wrap; }
 .ramp-legend i { display: block; width: 9rem; height: 0.6rem; border-radius: 2px; background: linear-gradient(90deg, #2f6bd8, #2aa198, #8a9a2b, #d08a1e, #c4512b); }
+h2.tldr { font-size: var(--step-2); max-width: 40rem; }
 .viewer-msg { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font: 400 0.85rem var(--font-mono); color: var(--stage-muted); pointer-events: none; }
 [hidden] { display: none !important; }   /* author display rules (e.g. .viewer-msg) would otherwise override the hidden attribute */
 .viewer-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem 1.5rem; align-items: center; }
@@ -358,6 +359,8 @@ figcaption b { color: var(--ink); font-weight: 600; }
 .analyses.rows .analysis:not(.wide) h3 { grid-column: 1 / -1; }
 @media (max-width: 860px) { .analyses.rows .analysis:not(.wide) { grid-template-columns: minmax(0, 1fr); } }
 .plate.scroll { overflow-x: auto; }
+.plate.scroll .sizer img { margin-inline: auto; }
+figure .plate img { mix-blend-mode: multiply; }   /* white page background of the renders takes the plate colour */
 .plate.scroll .sizer { min-width: 560px; }
 .analysis p { font-size: 0.95rem; }
 
@@ -375,7 +378,6 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
       <a href="#metrics">Metrics</a>
       <a href="#results">Results</a>
       <a href="#analyses">Analyses</a>
-      <a href="#limitations">Limitations</a>
     </nav>
   </div>
 </header>
@@ -396,10 +398,8 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
 <section class="motion" id="motion" aria-labelledby="motion-title">
   <div class="motion-head">
     <div class="text">
-      <p class="eyebrow">4D results</p>
-      <h2 id="motion-title">Early and late hearts, overlaid</h2>
-      <p>Five validation subjects whose true heart reaches end-systole (ES) early (≤ 416 ms, blue) and five whose heart reaches it late (≥ 800 ms, orange) are overlaid on one template at true scale, so only their motion differs.</p>
-      <p>The ground truth and Time2Track keep the blue and orange hearts apart in time, while PhysCtrl moves all ten together, which is the collapse to an average heartbeat.</p>
+      <p class="eyebrow">TL;DR</p>
+      <h2 id="motion-title" class="tldr">From a resting ECG, Time2Track keeps early and late hearts apart in time, while PhysCtrl collapses them into one average heartbeat.</h2>
     </div>
     <div class="controls">
       <div class="transport">
@@ -424,19 +424,13 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
       <p class="viewer-msg" id="viewer-msg">Loading the 4D meshes…</p>
     </div>
   </div>
-  <div class="viewer-foot">
-    <span class="note" id="mode-note">Each heart shows its own motion rotated onto a shared template at true scale, and dragging rotates all views.</span>
-  </div>
   <figure>
     <div class="chart" id="chart-spread"></div>
-    <figcaption><b>Early–late gap.</b> The distance between the average early and late motion averages 3.5 mm in the ground truth, 4.1 mm for Time2Track and 2.0 mm for PhysCtrl.</figcaption>
   </figure>
   <figure>
     <div class="cohort" id="chart-cohort"></div>
     <div class="ramp-legend"><span class="note">true end-systole</span><span class="mono" id="ramp-lo"></span><i></i><span class="mono" id="ramp-hi"></span></div>
-    <figcaption><b>The same collapse across 400 random validation subjects.</b> Coloured by true ES, the volume minima spread from blue to orange in the ground truth and Time2Track but pile up at one moment for PhysCtrl, although Time2Track orders individual subjects only partly.</figcaption>
   </figure>
-  <p class="note">Subjects are the five per group with the median Time2Track timing error after a ground-truth quality screen, shown without identifiers and with isolated single-frame jumps removed by one filter for all models, and across all 160 early and 237 late subjects the average ES gap is 384 ms in the ground truth, 192 ms for Time2Track and 96 ms for PhysCtrl.</p>
 
 <div class="facts heart-facts">
   <div class="fact"><b class="num">40,462</b><span>paired resting ECG and cardiac MRI meshes, same visit</span></div>
@@ -720,7 +714,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
   <div class="text">
     <p class="eyebrow">Analyses</p>
     <h2>Pathology, ECG-only use, emg2pose, and ablations</h2>
-    <p>These analyses were run during the review discussion and appear in the camera-ready paper (Section 4 and Appendix A.6 to A.9), with the tables typeset as in the paper.</p>
+    <p>These analyses appear in the camera-ready paper (Section 4 and Appendix A.3, A.6 and A.7), with the tables typeset as in the paper.</p>
   </div>
   <div class="analyses rows">
     <div class="analysis">
@@ -738,37 +732,34 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
       <p>Adding delay tokens to two sEMG decoders of hand pose on the held-out test split of emg2pose lowers |PAR−1| of EMGFormer in every subset and |APCR−1| of both decoders in four of the five subsets, while RMSE and |APDR−1| change by less than 0.01 (three training seeds per model).</p>
       <figure><div class="plate scroll"><div class="sizer"><img src="img/an_emg2pose_delta_e39e.webp" width="1703" height="467" loading="lazy" alt="Four panels of the change in RMSE, |PAR−1|, |APCR−1| and |APDR−1|, model with delay tokens minus baseline, for EMGFormer and vemg2pose over all stages and four gesture stages, with seed dots and mean ± SD bars around zero."></div></div></figure>
     </div>
+  </div>
+  <details class="fold">
+    <summary>Ablation studies</summary>
+    <div class="analyses rows">
     <div class="analysis">
-      <h3>Ablation study #1: electrode noise and missing leads</h3>
+      <h3>Ablation study #1: components of Time2Track</h3>
+      <p>With the diffusion backbone and the schedule fixed, removing the delay branch lowers APDR from 0.981 to 0.826, replacing FFT-CC by fixed T or QRS delays or a raw scalar lag and replacing the Fourier-feature lag embedding move APCR and APDR away from 1, and patch lengths of 4, 8 or 16 collapse amplitude and diversity (PAR ≤ 0.726, APCR ≥ 2.275).</p>
+      <figure><div class="plate scroll"><div class="sizer"><img src="img/cr_ablation_components.webp" style="width: 85.8%" width="1482" height="828" loading="lazy" alt="Component ablation table: without the delay branch APCR 0.956 and APDR 0.826; FFT-CC replaced by Delay-T, Delay-QRS or a raw scalar lag; the Fourier-feature lag embedding replaced by a scalar MLP or without positional embeddings; patch lengths 4, 8 and 16; the full model with PAR 0.896, APCR 0.966 and APDR 0.981."></div></div></figure>
+    </div>
+    <div class="analysis">
+      <h3>Ablation study #2: electrode noise and missing leads</h3>
       <p>On the diseased subgroup, noise down to 5 dB SNR costs at most 3% fidelity with unchanged diversity, and dropping the reference lead II leaves fidelity intact but raises |APCR−1|.</p>
       <figure><div class="plate scroll"><div class="sizer"><img src="img/cr_tab6_noise_dropout.webp" style="width: 100.0%" width="1554" height="393" loading="lazy" alt="Table of RV, RMSE, PAR, |APCR−1| and |APDR−1| for clean input, noise at 20, 10 and 5 dB SNR, and dropped leads V2, II and V1 to V3. Dropping lead II raises |APCR−1| from 0.027 to 0.108."></div></div></figure>
     </div>
     <div class="analysis">
-      <h3>Ablation study #2: lag window τ<sub>max</sub></h3>
+      <h3>Ablation study #3: lag window τ<sub>max</sub></h3>
       <p>Changing τ<sub>max</sub> at inference across a 4× range moves no metric outside its bootstrap interval (95% intervals for RV and RMSE, default in bold).</p>
       <figure><div class="plate scroll"><div class="sizer"><img src="img/cr_tab7_taumax.webp" style="width: 95.9%" width="1490" height="258" loading="lazy" alt="Table of metrics for τmax of 25, 50, 75 and 100 frames (±50 to ±200 ms). RV stays between 0.565 and 0.570 and RMSE at 0.181 with overlapping intervals."></div></div></figure>
     </div>
     <div class="analysis">
-      <h3>Ablation study #3: reference lead</h3>
+      <h3>Ablation study #4: reference lead</h3>
       <p>Retraining Time2Track with aVR or aVL instead of lead II as the reference degrades the performance. The first row repeats Table 1.</p>
       <figure><div class="plate scroll"><div class="sizer"><img src="img/cr_tab8_reflead.webp" style="width: 85.6%" width="1330" height="227" loading="lazy" alt="Table of metrics for reference leads II, aVR and aVL. Lead II: RV 0.637, RMSE 0.151, PAR 0.896, |APCR−1| 0.034, |APDR−1| 0.019. aVR and aVL have lower RV and higher RMSE."></div></div></figure>
     </div>
-  </div>
+    </div>
+  </details>
 </section>
 
-<section id="limitations">
-  <div class="text">
-    <p class="eyebrow">Limitations</p>
-    <h2>What these results do not show</h2>
-  </div>
-  <ul class="limits">
-    <li>The UK Biobank split has no separate test set, so although no reported metric entered checkpoint selection, every number comes from the split that selected the checkpoint.</li>
-    <li>Time2Track preserves the population spread of motion timing, but its per-subject ES error does not beat a constant population mean.</li>
-    <li>The cohort is about 90% healthy with registry-coded diagnoses, so severe or acute pathology is untested.</li>
-    <li>388 control points are coarser than the ventricular wall, so regional wall-motion abnormalities are out of reach for both the model and the metrics.</li>
-    <li>Time2Track still needs one rest mesh from an existing scan, and a population template in its place keeps most diversity but costs geometric accuracy.</li>
-  </ul>
-</section>
 
 </main>
 
@@ -1090,6 +1081,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
       const resid = (s, q) => { const r = curve(s, q, 'raw'), tr = curve(s, q, 'trend'); return r.map((v, t) => v - tr[t]); };
       const pp = c => Math.max(...c) - Math.min(...c);
       let model = 'Time2Track', [pa, pb] = D.default_pair;
+      let parQ = D.par_default ?? pa;                   // PAR example subject (display position); a click on a matrix cell moves it to that pair
       const ours = () => model === 'Time2Track' ? ' ours' : '';
 
       const paint = (cv, size, f) => {
@@ -1115,7 +1107,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
         const r = cv.getBoundingClientRect();
         const j = Math.floor((e.clientX - r.left) / r.width * n), i = Math.floor((e.clientY - r.top) / r.height * n);
         if (i === j || Math.min(i, j) < 0 || Math.max(i, j) >= n) return;
-        [pa, pb] = [Math.min(i, j), Math.max(i, j)]; drawPair();
+        [pa, pb] = [Math.min(i, j), Math.max(i, j)]; parQ = pa; drawPair();
       };
       [...cvs.d, ...cvs.rv].forEach(cv => cv.addEventListener('click', e => pick(cv, e)));
 
@@ -1140,10 +1132,10 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
 
       const drawPar = () => {
         const host = document.getElementById('mx-par'); host.replaceChildren();
-        const q = D.order[pa], G0 = curve(GT, q, 'raw'), Gt = curve(GT, q, 'trend'), P0 = curve(model, q, 'raw'), Pt = curve(model, q, 'trend');
+        const q = D.order[parQ], G0 = curve(GT, q, 'raw'), Gt = curve(GT, q, 'trend'), P0 = curve(model, q, 'raw'), Pt = curve(model, q, 'trend');
         const rg = resid(GT, q), rp = resid(model, q), ppg = pp(rg), ppp = pp(rp);
         const W = 660, H = 270, L = 54, TOP = 30, B = 46, gap = 64, BR = 92, w = (W - L - gap - BR) / 2, h = H - TOP - B;
-        const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Trajectory of one heart point for subject ${pa + 1}, ground truth and ${model}, before and after removing the cubic trend` }, host);
+        const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Trajectory of one heart point for subject ${parQ + 1}, ground truth and ${model}, before and after removing the cubic trend` }, host);
         const all = [...G0, ...Gt, ...P0, ...Pt], pad = 0.06 * (Math.max(...all) - Math.min(...all));
         const A = panel(svg, L, TOP, w, h, Math.min(...all) - pad, Math.max(...all) + pad, '1. Trajectory and cubic trend', `${AX} position (mm)`, 'Frame');
         el('path', { d: path(xs(A.x), Gt.map(A.y)), class: 'mx-gt mx-trend' }, svg);
@@ -1165,7 +1157,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
         for (const [lx, cls, lab] of lg) { el('line', { x1: lx, x2: lx + 18, y1: H - 6, y2: H - 6, class: cls }, svg); text(svg, lx + 24, H - 2, lab); }
         const M = D.models[model];
         document.getElementById('mx-par-num').innerHTML =
-          `Subject ${pa + 1}, this point: ${ppp.toFixed(2)} / ${ppg.toFixed(2)} = <b class="${ours().trim()}">${(ppp / ppg).toFixed(2)}</b><br>` +
+          `Subject ${parQ + 1}, this point: ${ppp.toFixed(2)} / ${ppg.toFixed(2)} = <b class="${ours().trim()}">${(ppp / ppg).toFixed(2)}</b><br>` +
           `All ${D.n_subjects.toLocaleString('en-US')} subjects and points: PAR <b class="${ours().trim()}">${M.PAR.toFixed(3)}</b>`;
       };
 
