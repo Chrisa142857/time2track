@@ -1,0 +1,1858 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Time2Track: delay-aware ECG conditioning for individualized 4D cardiac motion generation (NeurIPS 2026).">
+<title>Time2Track</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&family=Literata:opsz,wght@7..72,400;7..72,600&display=swap">
+<style>
+/* Layout: one reading column (≈68ch) on ECG chart paper, with wide breakouts for figures, tables and charts. Light = printed ECG strip, dark = bedside monitor. */
+:root {
+  --paper: #fdfbfb;
+  --ink: #1d2230;
+  --muted: #5c6070;
+  --surface: #f6f1f1;
+  --rule: #e6dcdc;
+  --grid-minor: #f7e3e3;
+  --grid-major: #efc4c6;
+  --accent: #c41d39;
+  --accent-soft: #fbe9ec;
+  --base: #8a8fa0;
+  --trace: #1d2230;
+  --plate: #ffffff;
+  --stage: #121a1f;
+  --stage-ink: #eef2f1;
+  --stage-muted: #9fb0ab;
+  --stage-accent: #ff6b81;
+  --stage-line: rgba(255, 255, 255, 0.08);
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Literata", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --step--1: 0.84rem;
+  --step-0: 1.02rem;
+  --step-1: 1.25rem;
+  --step-2: 1.6rem;
+  --step-3: 2.2rem;
+  --step-4: clamp(2.8rem, 8vw, 5.2rem);
+  --col: 44rem;
+  --wide: 70rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0b1110; --ink: #e2ebe7; --muted: #93a39c; --surface: #121b18; --rule: #22312c;
+    --grid-minor: #101c19; --grid-major: #19302a; --accent: #ff5f77; --accent-soft: #2a1519;
+    --base: #73827c; --trace: #7cf0b0; --plate: #f2f3f1; --stage: #070b0a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0b1110; --ink: #e2ebe7; --muted: #93a39c; --surface: #121b18; --rule: #22312c;
+  --grid-minor: #101c19; --grid-major: #19302a; --accent: #ff5f77; --accent-soft: #2a1519;
+  --base: #73827c; --trace: #7cf0b0; --plate: #f2f3f1; --stage: #070b0a; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 4rem; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--paper); color: var(--ink);
+  font: 400 var(--step-0)/1.65 var(--font-body);
+  margin: 0;
+}
+a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 0.2em; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.1; }
+h2 { font-size: var(--step-3); font-weight: 700; font-stretch: 88%; letter-spacing: -0.01em; }
+h3 { font-size: var(--step-1); font-weight: 650; font-stretch: 95%; }
+p { margin: 0; }
+.mono { font-family: var(--font-mono); }
+.eyebrow {
+  font: 500 0.74rem/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent);
+}
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- top bar ---------- */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(6px); border-bottom: 1px solid var(--rule);
+}
+.bar-inner {
+  max-width: var(--wide); margin: 0 auto; padding: 0.7rem 16px;
+  display: flex; align-items: center; gap: 1.5rem;
+}
+.bar .brand { font: 700 1.05rem/1 var(--font-display); font-stretch: 85%; text-decoration: none; white-space: nowrap; }
+.bar nav { display: flex; gap: 1.2rem; overflow-x: auto; min-width: 0; scrollbar-width: none; }
+.bar nav a { font: 400 0.8rem/1.6 var(--font-mono); text-decoration: none; color: var(--muted); white-space: nowrap; }
+.bar nav a:hover { color: var(--ink); }
+
+/* ---------- hero on chart paper ---------- */
+.hero { border-bottom: 1px solid var(--rule); }
+.hero-inner { max-width: var(--wide); margin: 0 auto; padding: 3.5rem 16px 1.5rem; display: grid; gap: 1.4rem; }
+.hero h1 { font-size: var(--step-4); font-weight: 800; font-stretch: 78%; letter-spacing: -0.02em; line-height: 0.95; }
+.hero .subtitle { font: 500 var(--step-2)/1.25 var(--font-display); font-stretch: 92%; max-width: 34ch; }
+.hero .lede { max-width: 62ch; color: var(--ink); background: color-mix(in srgb, var(--paper) 80%, transparent); }
+.hero .meta { display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem; align-items: center; font: 400 0.82rem/1.4 var(--font-mono); color: var(--muted); }
+.btn {
+  display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.9rem;
+  border: 1px solid var(--ink); border-radius: 3px; text-decoration: none;
+  font: 500 0.82rem/1 var(--font-mono); color: var(--ink); background: var(--paper);
+}
+.btn:hover { background: var(--ink); color: var(--paper); }
+.hero {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+    linear-gradient(var(--grid-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px);
+  background-size: 30px 30px, 30px 30px, 6px 6px, 6px 6px;
+}
+/* ---------- 4D viewer ---------- */
+.motion { padding: 2.5rem 16px 1rem; }
+.motion-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 1.2rem 2rem; }
+.controls { display: grid; gap: 0.7rem; justify-items: start; min-width: 0; }
+.transport select, .play {
+  font: 500 0.78rem/1 var(--font-mono); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 3px; padding: 0.5rem 0.7rem; cursor: pointer;
+}
+.transport { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.play { width: 2.4rem; text-align: center; }
+.transport input[type="range"] { width: min(16rem, 52vw); accent-color: var(--accent); }
+.transport output { min-width: 4.5rem; font-size: 0.8rem; }
+.viewer { position: relative; background: var(--stage); border-radius: 6px; overflow: hidden; touch-action: none; }
+.viewer canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.viewer canvas:active { cursor: grabbing; }
+.grid4d { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; gap: 0.4rem 0.5rem; }
+.colheads, .viewer-cells { display: grid; }
+.colheads > div { display: flex; align-items: center; gap: 0.4rem; font: 400 0.74rem/1.25 var(--font-mono); color: var(--muted); padding-left: 0.6rem; }
+.colheads i { width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none; }
+.colheads b { color: var(--ink); font-weight: 500; }
+.rowheads { display: grid; }
+.rowheads > div { writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; font: 650 0.85rem/1.1 var(--font-display); font-stretch: 88%; color: var(--ink); }
+.rowheads > div.ours { color: var(--accent); }
+.viewer-cells { position: absolute; inset: 0; pointer-events: none; }
+.viewer-cells > div { display: flex; align-items: flex-end; padding: 0.5rem; border-right: 1px solid var(--stage-line); border-bottom: 1px solid var(--stage-line); }
+.viewer-cells span { font: 400 0.7rem/1 var(--font-mono); color: var(--stage-muted); padding: 0.25rem 0.4rem; border-radius: 2px; border: 1px solid var(--stage-line); }
+.viewer-cells span.lit { background: var(--stage-ink); color: var(--stage); border-color: var(--stage-ink); }
+.viewer-cells span.lit.ours { background: var(--stage-accent); border-color: var(--stage-accent); }
+.seg { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.seg button, .seg select { font: 500 0.78rem/1 var(--font-mono); color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; padding: 0.5rem 0.7rem; cursor: pointer; }
+.grid4d.overlay { grid-template-columns: minmax(0, 1fr); }
+.grid4d.overlay .corner, .grid4d.overlay .rowheads { display: none; }
+.grid4d.overlay .colheads { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; }
+.grid4d.overlay .colheads > div { padding-left: 0; }
+.viewer-cells > div.ov { flex-direction: column; justify-content: space-between; align-items: flex-start; }
+.viewer-cells b { font: 650 0.92rem/1 var(--font-display); font-stretch: 90%; color: var(--stage-ink); }
+.viewer-cells b.ours { color: var(--stage-accent); }
+.viewer-cells .ov-foot { display: flex; align-items: center; gap: 0.3rem; }
+.viewer-cells .ov-foot i { width: 0.6rem; height: 0.6rem; border-radius: 50%; border: 1.5px solid; display: block; }
+.viewer-cells .ov-foot em { font: 400 0.72rem/1 var(--font-mono); font-style: normal; color: var(--stage-ink); margin-left: 0.35rem; }
+.viewer-cells .gapbar { position: relative; display: inline-block; width: 4.2rem; height: 0.55rem; border: 1px solid var(--stage-line); border-radius: 2px; margin-left: 0.3rem; }
+.viewer-cells .gapbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--stage-ink); }
+.viewer-cells .gapbar s { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #ffd27a; }
+.viewer-cells .gap-t { font: 400 0.62rem/1 var(--font-mono); color: var(--stage-muted); margin-left: 0.3rem; }
+.viewer-cells .grp { font: 400 0.66rem/1 var(--font-mono); color: var(--stage-muted); }
+.chart .sline-gt { stroke: var(--ink); stroke-width: 2; fill: none; }
+.chart .sline-ours { stroke: var(--accent); stroke-width: 2.4; fill: none; }
+.chart .sline-cnn { stroke: var(--base); stroke-width: 1.8; fill: none; stroke-dasharray: 6 4; }
+.chart .sline-alt { stroke: var(--muted); stroke-width: 1.8; fill: none; stroke-dasharray: 2 3; }
+.hand4d { margin-top: 1.2rem; display: grid; gap: 1.2rem; }
+details.fold { margin: 2rem 0 0; border: 1px solid var(--rule); border-radius: 6px; padding: 0.7rem 1rem; }
+details.fold > summary { cursor: pointer; font: 650 var(--step-0)/1.4 var(--font-display); font-stretch: 95%; color: var(--ink); }
+.chart .playhead { stroke: var(--ink); stroke-width: 1; opacity: 0.5; }
+.explorer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem 2.5rem; align-items: start; }
+@media (max-width: 960px) { .explorer { grid-template-columns: minmax(0, 1fr); } }
+.explorer-map, .explorer-detail { display: grid; gap: 0.8rem; min-width: 0; align-content: start; }
+.pair-head { display: grid; gap: 0.3rem; }
+.pair-head h3 { font-size: var(--step-1); }
+.pair-body, .pair-mesh { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 1rem; align-items: center; }
+@media (max-width: 520px) { .pair-body, .pair-mesh { grid-template-columns: minmax(0, 1fr); } }
+.torso { width: 100%; height: auto; max-width: 260px; }
+.torso .body { fill: var(--surface); stroke: var(--rule); stroke-width: 1.2; }
+.torso .heart { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 0.8; opacity: 0.8; }
+.torso .axis { stroke: var(--base); stroke-width: 1.2; opacity: 0.35; fill: none; }
+.torso .axis.on { stroke: var(--accent); stroke-width: 2.6; opacity: 1; }
+.torso .elec { fill: var(--paper); stroke: var(--base); stroke-width: 1.2; }
+.torso .elec.limb { fill: var(--surface); }
+.torso .elec.on { fill: var(--accent); stroke: var(--accent); }
+.torso text { font: 500 9px var(--font-mono); fill: var(--muted); }
+.torso text.on { fill: var(--accent); font-weight: 600; }
+.torso .tag { font-size: 8px; opacity: 0.8; }
+.pair-ecg svg, .pair-vol svg { min-width: 0; }
+.chart .ecg-early { stroke: #2f6bd8; stroke-width: 1.6; fill: none; }
+.chart .ecg-early.b, .chart .ecg-late.b { stroke-dasharray: 4 3; stroke-width: 1.4; }
+.chart .tp-early { stroke: #2f6bd8; stroke-width: 1; } .chart .tp-late { stroke: #c4512b; stroke-width: 1; }
+.chart .tp-early.b, .chart .tp-late.b { stroke-dasharray: 3 3; }
+.chart .brk-early { stroke: #2f6bd8; stroke-width: 1.6; fill: none; } .chart .brk-late { stroke: #c4512b; stroke-width: 1.6; fill: none; }
+.chart .brk-t-early { fill: #2f6bd8; font-weight: 600; font-size: 12.5px; } .chart .brk-t-late { fill: #c4512b; font-weight: 600; font-size: 12.5px; }
+.chart .band-early { fill: #2f6bd8; opacity: 0.16; } .chart .band-late { fill: #c4512b; opacity: 0.16; }
+.chart .tp-lab { font-size: 9.5px; fill: var(--muted); }
+.btn.draw { justify-self: start; font-size: 0.74rem; padding: 0.4rem 0.7rem; }
+.ex-buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chart .ecg-late { stroke: #c4512b; stroke-width: 1.6; fill: none; }
+.chart .dot-early { fill: #2f6bd8; } .chart .dot-late { fill: #c4512b; }
+.handmap { width: 100%; height: auto; max-width: 300px; }
+.handmap .skin { fill: var(--surface); stroke: var(--rule); stroke-width: 0.3; }
+.handmap .jt { fill: var(--paper); stroke: var(--base); stroke-width: 1; }
+.handmap .jt.on { fill: var(--accent); stroke: var(--accent); }
+.handmap text { font: 500 9px var(--font-mono); fill: var(--accent); }
+.ex-cell .vel-gt { stroke: #2aa198; stroke-width: 1.3; fill: none; } .ex-cell .vel-pred { stroke: #c4512b; stroke-width: 1.3; fill: none; }
+.ex-cell .vel-gt.b, .ex-cell .vel-pred.b { stroke-dasharray: 3 2.5; stroke-width: 1.1; }
+.ex-cell .d-gt { fill: #2aa198; font-weight: 600; font-size: 11px; } .ex-cell .d-pred { fill: #c4512b; font-weight: 600; font-size: 11px; }
+.ex-mesh-labels .g { color: #6fd6c9; }
+#d1-select { font: 500 0.78rem/1 var(--font-mono); color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; padding: 0.5rem 0.7rem; max-width: 22rem; }
+.ex-strip-wrap { overflow-x: auto; min-width: 0; margin-top: 1rem; }
+.ex-strip { min-width: 640px; display: grid; gap: 0.4rem; }
+.ex-legend { margin: 0; }
+.ex-title { font: 650 var(--step-0)/1.3 var(--font-display); font-stretch: 95%; margin: 0; }
+.ex-cell .ax { stroke: var(--muted); stroke-width: 0.6; } .ex-cell .ax-t { font: 500 9px var(--font-mono); fill: var(--muted); }
+.ex-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 0; row-gap: 0.3rem; }
+.ex-cell { padding: 0 0.3rem; min-width: 0; }
+.ex-cell svg { display: block; width: 100%; height: auto; }
+.chart .tick-s, .ex-cell .tick-s { font: 400 9px var(--font-mono); fill: var(--muted); }
+.ex-cell text { font: 400 10px var(--font-mono); fill: var(--muted); }
+.ex-cell .brk-t-early { fill: #2f6bd8; font-weight: 600; font-size: 11px; } .ex-cell .brk-t-late { fill: #c4512b; font-weight: 600; font-size: 11px; }
+.ex-cell .ecg-early { stroke: #2f6bd8; stroke-width: 1.3; fill: none; } .ex-cell .ecg-late { stroke: #c4512b; stroke-width: 1.3; fill: none; }
+.ex-cell .ecg-early.b, .ex-cell .ecg-late.b { stroke-dasharray: 3 2.5; stroke-width: 1.1; }
+.ex-cell .tp-early { stroke: #2f6bd8; stroke-width: 1; } .ex-cell .tp-late { stroke: #c4512b; stroke-width: 1; }
+.ex-cell .tp-early.b, .ex-cell .tp-late.b { stroke-dasharray: 3 3; }
+.ex-cell .band-early { fill: #2f6bd8; opacity: 0.16; } .ex-cell .band-late { fill: #c4512b; opacity: 0.16; }
+.ex-cell .cyc-band { fill: var(--ink); opacity: 0.06; } .ex-cell .cyc-t { font: 500 8px var(--font-mono); fill: var(--muted); }
+.ex-cell .brk-early { stroke: #2f6bd8; stroke-width: 1.4; } .ex-cell .brk-late { stroke: #c4512b; stroke-width: 1.4; }
+.ex-cell .playhead { stroke: var(--ink); stroke-width: 1; opacity: 0.45; }
+.ex-mesh { position: relative; background: var(--stage); border-radius: 6px; overflow: hidden; aspect-ratio: 5 / 1.15; touch-action: none; }
+.ex-mesh canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.ex-mesh-labels { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); pointer-events: none; }
+.ex-mesh-labels > div { display: flex; align-items: flex-end; justify-content: center; gap: 0.5rem; padding: 0.35rem; border-right: 1px solid var(--stage-line); font: 400 0.68rem/1 var(--font-mono); }
+.ex-mesh-labels .e { color: #8fb4ff; } .ex-mesh-labels .l { color: #ff9f80; }
+.ex-mesh-labels.with-title > div { flex-direction: column; justify-content: space-between; align-items: center; }
+.ex-mesh-labels .gn { color: var(--stage-ink); font-weight: 600; text-align: center; line-height: 1.2; }
+.ex-mesh-labels .sides { display: flex; gap: 0.5rem; }
+.ex-mesh-labels.with-title .sides { width: 100%; justify-content: space-around; }
+#d1-mesh { aspect-ratio: 10 / 1.4; }
+.mini-viewer { position: relative; background: var(--stage); border-radius: 6px; overflow: hidden; aspect-ratio: 1 / 1; max-width: 100%; touch-action: none; }
+.mini-viewer canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.mini-key { position: absolute; left: 0.5rem; bottom: 0.4rem; display: flex; gap: 0.6rem; font: 400 0.68rem/1 var(--font-mono); color: var(--stage-ink); pointer-events: none; }
+.mini-key span { display: flex; align-items: center; gap: 0.25rem; }
+.mini-key i { width: 0.55rem; height: 0.55rem; border-radius: 50%; display: block; }
+.heat rect.cell { cursor: pointer; }
+.heat rect.cell.sel { stroke: var(--ink); stroke-width: 2.5; }
+.heat svg { min-width: 440px; max-width: 560px; }
+.heat .cell-t { font: 400 9.5px var(--font-mono); pointer-events: none; }
+.heat-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem; font-size: 0.78rem; }
+.heat-legend i { display: block; width: 5rem; height: 0.6rem; border-radius: 2px; }
+.heat-legend .bar-d { background: linear-gradient(90deg, #3b4cc0, #8db0fe, #dddddd, #f4987a, #b40426); }
+.heat-legend .bar-p { background: linear-gradient(90deg, #ffffd9, #c7e9b4, #41b6c4, #225ea8, #081d58); margin-right: 0.8rem; }
+.heat-legend .bar-d { margin-right: 0.8rem; }
+.cohort { overflow-x: auto; }
+.cohort svg { display: block; width: 100%; min-width: 600px; height: auto; }
+.cohort text { font: 400 11px var(--font-mono); fill: var(--muted); }
+.cohort .panel-title { fill: var(--ink); font-weight: 500; font-size: 12px; }
+.cohort .panel-title.ours { fill: var(--accent); }
+.cohort .gridline { stroke: var(--rule); stroke-dasharray: 2 3; } .cohort .axis { stroke: var(--rule); }
+.cohort .curve { fill: none; stroke-width: 0.9; opacity: 0.45; }
+.cohort .playhead { stroke: var(--ink); stroke-width: 1; opacity: 0.5; }
+.ramp-legend { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; flex-wrap: wrap; }
+.ramp-legend i { display: block; width: 9rem; height: 0.6rem; border-radius: 2px; background: linear-gradient(90deg, #2f6bd8, #2aa198, #8a9a2b, #d08a1e, #c4512b); }
+.viewer-msg { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font: 400 0.85rem var(--font-mono); color: var(--stage-muted); pointer-events: none; }
+.viewer-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem 1.5rem; align-items: center; }
+
+.facts { max-width: var(--wide); margin: 0 auto; padding: 1.6rem 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem 2rem; }
+.heart-facts { padding-inline: 0; width: 100%; }
+.fact { display: grid; gap: 0.2rem; border-top: 2px solid var(--ink); padding-top: 0.6rem; }
+.fact b { font: 700 var(--step-2)/1 var(--font-display); font-stretch: 85%; font-variant-numeric: tabular-nums; }
+.fact span { font-size: var(--step--1); color: var(--muted); line-height: 1.4; }
+
+/* ---------- sections ---------- */
+main { padding-inline: 16px; }
+section { max-width: var(--wide); margin: 0 auto; padding-block: 4rem 1rem; display: grid; gap: 1.4rem; }
+section > .text, .text { max-width: var(--col); display: grid; gap: 1rem; }
+section + section { border-top: 1px solid var(--rule); }
+.note { font-size: var(--step--1); color: var(--muted); line-height: 1.55; }
+
+figure { margin: 0; display: grid; gap: 0.7rem; min-width: 0; }
+figure .plate { background: var(--plate); border-radius: 4px; padding: clamp(0.5rem, 2vw, 1.2rem); }
+figure img { display: block; width: 100%; height: auto; }
+figcaption { font-size: var(--step--1); color: var(--muted); max-width: var(--col); line-height: 1.55; }
+figcaption b { color: var(--ink); font-weight: 600; }
+
+/* contributions */
+.contribs { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 2rem; counter-reset: c; }
+.contrib { display: grid; gap: 0.6rem; align-content: start; min-width: 0; }
+.contrib::before {
+  counter-increment: c; content: "(" counter(c, lower-roman) ")";
+  font: 500 0.85rem/1 var(--font-mono); color: var(--accent);
+}
+.contrib p { font-size: 0.97rem; }
+
+.eq {
+  font: 400 1.05rem/1.6 var(--font-body); font-style: italic; padding: 0.8rem 1rem;
+  border-left: 2px solid var(--accent); background: var(--surface); overflow-x: auto; white-space: nowrap;
+}
+.eq .up { font-style: normal; }
+
+
+/* charts */
+.chart { overflow-x: auto; min-width: 0; }
+.chart svg { display: block; width: 100%; min-width: 520px; height: auto; }
+.chart text { font: 400 12px var(--font-mono); fill: var(--muted); }
+.chart .lbl { fill: var(--ink); }
+.chart .lbl.ours { fill: var(--accent); font-weight: 500; }
+.chart .axis { stroke: var(--rule); }
+.chart .gridline { stroke: var(--rule); stroke-dasharray: 2 3; }
+.chart .ideal { stroke: var(--ink); stroke-dasharray: 4 3; stroke-width: 1; }
+.chart .bar-gt { fill: var(--ink); }
+.chart .bar-base { fill: var(--base); }
+.chart .bar-ours { fill: var(--accent); }
+.chart .whisk { stroke: var(--ink); stroke-width: 1.2; }
+.chart .panel-title { fill: var(--ink); font-weight: 500; }
+/* metric explainer */
+.mx { display: grid; gap: 1.4rem; }
+.mx-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 0.8rem 2rem; }
+.mx-head .text { gap: 0.5rem; }
+.mx-row { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 2.05fr); gap: 1rem 2.2rem; align-items: start; border-top: 1px solid var(--rule); padding-top: 1.2rem; }
+@media (max-width: 900px) { .mx-row { grid-template-columns: minmax(0, 1fr); } }
+.mx-text { display: grid; gap: 0.6rem; min-width: 0; font-size: 0.94rem; }
+.mx-text h4 { font: 650 var(--step-1)/1.2 var(--font-display); font-stretch: 92%; margin: 0; }
+.mx-text .eq { font-size: 0.92rem; padding: 0.6rem 0.8rem; white-space: normal; }
+.mx-num { font: 400 0.78rem/1.6 var(--font-mono); color: var(--muted); }
+.mx-num b { font: 600 1.15rem var(--font-mono); color: var(--ink); }
+.mx-num b.ours { color: var(--accent); }
+.mx-vis { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); gap: 0.9rem; align-items: start; min-width: 0; }
+@media (max-width: 640px) { .mx-vis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .mx-vis > .mx-side { grid-column: 1 / -1; } }
+.mx-cap { font: 400 0.72rem/1.35 var(--font-mono); color: var(--muted); margin-bottom: 0.35rem; min-height: 2.7em; }
+.mx-cap b { color: var(--ink); font-weight: 500; } .mx-cap b.ours { color: var(--accent); }
+.mx-mat { position: relative; border: 1px solid var(--rule); }
+.mx-mat canvas, .mx-fp canvas { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; }
+.mx-mat canvas { cursor: crosshair; }
+.mx-mark { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border: 2px solid var(--ink); border-radius: 50%; box-shadow: 0 0 0 1.5px var(--paper); pointer-events: none; }
+.mx-bar { height: 0.45rem; border-radius: 2px; margin-top: 0.4rem; }
+.mx-bar-lab { display: flex; justify-content: space-between; font: 400 0.68rem var(--font-mono); color: var(--muted); }
+.mx-fp { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); gap: 0.35rem 0.45rem; align-items: center; }
+.mx-fp span { font: 400 0.7rem/1.3 var(--font-mono); color: var(--muted); text-align: center; }
+.mx-fp span.row { text-align: right; } .mx-fp span b { color: var(--ink); font-weight: 500; } .mx-fp span b.ours { color: var(--accent); }
+.mx-chart svg { min-width: 0; }
+.chart .mx-gt { stroke: var(--ink); stroke-width: 1.8; fill: none; }
+.chart .mx-pred { stroke: var(--base); stroke-width: 1.8; fill: none; }
+.chart .mx-pred.ours { stroke: var(--accent); }
+.chart .mx-trend { stroke-dasharray: 4 3; stroke-width: 1.2; opacity: 0.85; }
+.chart .mx-b { stroke-dasharray: 5 3; }
+.chart .mx-fill-gt { fill: var(--ink); opacity: 0.1; } .chart .mx-fill-pred { fill: var(--base); opacity: 0.18; } .chart .mx-fill-pred.ours { fill: var(--accent); opacity: 0.14; }
+.chart .mx-brk-gt { stroke: var(--ink); stroke-width: 2; fill: none; } .chart .mx-brk-pred { stroke: var(--base); stroke-width: 2; fill: none; } .chart .mx-brk-pred.ours { stroke: var(--accent); }
+.chart .mx-t-gt { fill: var(--ink); font-weight: 500; } .chart .mx-t-pred { fill: var(--base); font-weight: 500; } .chart .mx-t-pred.ours { fill: var(--accent); }
+
+.duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 2.5rem; align-items: start; }
+
+/* analysis cards */
+.analyses { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 2.5rem 3rem; }
+.analysis { display: grid; gap: 0.8rem; align-content: start; min-width: 0; }
+.analysis.wide { grid-column: 1 / -1; }
+.analysis.wide p { max-width: var(--col); }
+.analyses.rows { grid-template-columns: minmax(0, 1fr); gap: 2.2rem; }
+.analyses.rows .analysis:not(.wide) { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr); column-gap: 2.2rem; align-items: start; }
+.analyses.rows .analysis:not(.wide) h3 { grid-column: 1 / -1; }
+@media (max-width: 860px) { .analyses.rows .analysis:not(.wide) { grid-template-columns: minmax(0, 1fr); } }
+.plate.scroll { overflow-x: auto; }
+.plate.scroll .sizer { min-width: 560px; }
+.analysis p { font-size: 0.95rem; }
+
+.limits { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.7rem; max-width: var(--col); }
+footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; border-top: 1px solid var(--rule); display: grid; gap: 0.6rem; font-size: var(--step--1); color: var(--muted); }
+</style>
+
+<header class="bar">
+  <div class="bar-inner">
+    <a class="brand" href="#top">Time2Track</a>
+    <nav aria-label="Sections">
+      <a href="#motivation">Motivation</a>
+      <a href="#contributions">Contributions</a>
+      <a href="#method">Method</a>
+      <a href="#metrics">Metrics</a>
+      <a href="#results">Results</a>
+      <a href="#analyses">Analyses</a>
+      <a href="#limitations">Limitations</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero" id="top">
+  <div class="hero-inner">
+    <p class="eyebrow">NeurIPS 2026 · Ziquan Wei, Tingting Dan, Guorong Wu</p>
+    <h1>Time2Track</h1>
+    <p class="subtitle">Delay-aware ECG conditioning for individualized 4D cardiac motion generation</p>
+    <p class="lede">Time2Track generates the 4D motion of a heart mesh from a resting 12-lead ECG and one rest mesh, using wavelet morphology and inter-lead delay tokens to keep the individual variation that generic motion diffusion collapses to an average.</p>
+    <div class="meta">
+      <a class="btn" href="https://github.com/Chrisa142857/time2track">Code (GitHub)</a>
+      <span>UK Biobank · 40,462 ECG–mesh pairs</span>
+    </div>
+  </div>
+</div>
+
+<section class="motion" id="motion" aria-labelledby="motion-title">
+  <div class="motion-head">
+    <div class="text">
+      <p class="eyebrow">4D results</p>
+      <h2 id="motion-title">Early and late hearts, overlaid</h2>
+      <p>Five validation subjects whose true heart reaches end-systole (ES) early (≤ 416 ms, blue) and five whose heart reaches it late (≥ 800 ms, orange) are overlaid on one template at true scale, so only their motion differs.</p>
+      <p>The ground truth and Time2Track keep the blue and orange hearts apart in time, while PhysCtrl moves all ten together, which is the collapse to an average heartbeat.</p>
+    </div>
+    <div class="controls">
+      <div class="transport">
+        <button type="button" class="play" id="play" aria-label="Pause">❚❚</button>
+        <input type="range" id="frame" min="0" max="49" value="0" aria-label="Frame">
+        <output id="time" class="mono num">0 ms</output>
+        <select id="speed" aria-label="Playback speed">
+          <option value="0.25">0.25×</option>
+          <option value="0.5" selected>0.5×</option>
+          <option value="1">1×</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="grid4d">
+    <div class="corner"></div>
+    <div class="colheads" id="colheads"></div>
+    <div class="rowheads" id="rowheads"></div>
+    <div class="viewer" id="viewer">
+      <canvas id="mesh-canvas"></canvas>
+      <div class="viewer-cells" id="viewer-cells"></div>
+      <p class="viewer-msg" id="viewer-msg">Loading the 4D meshes…</p>
+    </div>
+  </div>
+  <div class="viewer-foot">
+    <span class="note" id="mode-note">Each heart shows its own motion rotated onto a shared template at true scale, and dragging rotates all views.</span>
+  </div>
+  <figure>
+    <div class="chart" id="chart-spread"></div>
+    <figcaption><b>Early–late gap.</b> The distance between the average early and late motion averages 3.5 mm in the ground truth, 4.1 mm for Time2Track and 2.0 mm for PhysCtrl.</figcaption>
+  </figure>
+  <figure>
+    <div class="cohort" id="chart-cohort"></div>
+    <div class="ramp-legend"><span class="note">true end-systole</span><span class="mono" id="ramp-lo"></span><i></i><span class="mono" id="ramp-hi"></span></div>
+    <figcaption><b>The same collapse across 400 random validation subjects.</b> Coloured by true ES, the volume minima spread from blue to orange in the ground truth and Time2Track but pile up at one moment for PhysCtrl, although Time2Track orders individual subjects only partly.</figcaption>
+  </figure>
+  <p class="note">Subjects are the five per group with the median Time2Track timing error after a ground-truth quality screen, shown without identifiers and with isolated single-frame jumps removed by one filter for all models, and across all 160 early and 237 late subjects the average ES gap is 384 ms in the ground truth, 192 ms for Time2Track and 96 ms for PhysCtrl.</p>
+
+<div class="facts heart-facts">
+  <div class="fact"><b class="num">40,462</b><span>paired resting ECG and cardiac MRI meshes, same visit</span></div>
+  <div class="fact"><b class="num">12 × 600</b><span>ECG leads × samples at 500 Hz per input</span></div>
+  <div class="fact"><b class="num">388 × 50</b><span>mesh control points × frames per cardiac cycle</span></div>
+  <div class="fact"><b class="num">8,093</b><span>validation subjects behind every reported number</span></div>
+</div>
+
+<details class="fold">
+<summary>Hand motion from sEMG (emg2pose)</summary>
+<div class="hand4d" aria-labelledby="hand4d-title">
+  <div class="motion-head">
+    <div class="text">
+      <h2 id="hand4d-title">Lockstep and staggered hands, overlaid</h2>
+      <p>Five test gesture cycles of <span id="h-gesture"></span> whose true joints start nearly together (lockstep, blue) and five whose joints start one after another (staggered, orange) move from one shared start pose, so only their motion differs.</p>
+      <p>The ground truth keeps the two kinds of movement apart, while EMGFormer starts the joints of every hand at similar times, with or without Time2Track's sEMG delay tokens, so the timing difference collapses.</p>
+    </div>
+    <div class="controls">
+      <div class="seg"><select id="h-gesture-sel" aria-label="Gesture"></select></div>
+      <div class="transport">
+        <button type="button" class="play" id="h-play" aria-label="Pause">❚❚</button>
+        <input type="range" id="h-frame" min="0" max="34" value="0" aria-label="Frame">
+        <output id="h-time" class="mono num">0 ms</output>
+        <select id="h-speed" aria-label="Playback speed">
+          <option value="0.25">0.25×</option>
+          <option value="0.5" selected>0.5×</option>
+          <option value="1">1×</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="grid4d overlay" id="h-grid4d">
+    <div class="corner"></div>
+    <div class="colheads" id="h-colheads"></div>
+    <div class="rowheads" id="h-rowheads"></div>
+    <div class="viewer" id="h-viewer">
+      <canvas id="h-canvas"></canvas>
+      <div class="viewer-cells" id="h-cells"></div>
+      <p class="viewer-msg" id="h-msg">Loading the 4D hands…</p>
+    </div>
+  </div>
+  <div class="viewer-foot">
+    <span class="note" id="h-mode-note"></span>
+  </div>
+  <figure>
+    <div class="chart" id="h-gap"></div>
+    <figcaption><b>Lockstep–staggered gap.</b> The difference between the five lockstep and the five staggered hands in the fraction of joints that have started to move, averaged from 200 ms before to 500 ms after the cycle start, is <span id="h-gap-list"></span>.</figcaption>
+  </figure>
+  <figure>
+    <div class="cohort" id="h-cohort"></div>
+    <div class="ramp-legend"><span class="note">true joint onset spread</span><span class="mono" id="h-ramp-lo"></span><i></i><span class="mono" id="h-ramp-hi"></span></div>
+    <figcaption><b>The same collapse across <span id="h-n"></span> random lockstep and staggered test cycles of all gestures.</b> Each curve is the fraction of a cycle's joints that have started to move, coloured by the true joint onset spread, and the curves rise in one step for blue and gradually for orange cycles in the ground truth but rise alike for every decoder.</figcaption>
+  </figure>
+  <p class="note" id="h-note"></p>
+  <div class="facts heart-facts">
+    <div class="fact"><b class="num">24,974</b><span>sEMG recordings with motion-capture hand pose (emg2pose), each with a usable gesture cycle</span></div>
+    <div class="fact"><b class="num">16 × 7,790</b><span>sEMG channels × samples at 2 kHz per input</span></div>
+    <div class="fact"><b class="num">20 × 7,280</b><span>joint angles × samples predicted per window at 2 kHz</span></div>
+    <div class="fact"><b class="num">6,149</b><span>held-out test sessions from 178 participants behind every reported number</span></div>
+  </div>
+</div>
+</details>
+</section>
+
+
+
+<main>
+
+<section id="motivation">
+  <div class="text">
+    <p class="eyebrow">Motivation</p>
+    <h2>The ECG leads the heartbeat, by a delay that differs between people</h2>
+    <p>The ECG records the electrical wave that triggers each contraction, and the mechanical response follows with a delay that differs between leads and between people.</p>
+    <p>In the UK Biobank, end-systole (ES, the frame of smallest heart volume) varies by 91 ms (SD) across 8,093 validation subjects, and the hearts with the earliest and latest ES differ in inter-lead ECG delay in 41 of 66 lead pairs, most strongly at V2 and V3.</p>
+    <p>PhysCtrl, a standard motion diffusion model with a generic ECG encoder, compresses this spread by a quarter and gives every subject a near-average heartbeat, which is the failure Time2Track targets.</p>
+  </div>
+  <figure class="explorer-fig">
+    <div class="explorer">
+      <div class="explorer-map">
+        <div class="chart heat" id="chart-fig1b"></div>
+        <div class="heat-legend">
+          <span class="note">lower: Cohen's <i>d</i></span><span class="mono" id="d-lo"></span><i class="bar-d"></i><span class="mono" id="d-hi"></span>
+          <span class="note">upper: <i>p</i></span><span class="mono">0</span><i class="bar-p"></i><span class="mono">1</span>
+        </div>
+      </div>
+      <div class="explorer-detail">
+        <div class="pair-head">
+          <h3 id="pair-title">Lead pair</h3>
+          <p class="note num" id="pair-stats" aria-live="polite"></p>
+          <button type="button" class="btn draw" id="ex-draw">Draw 5 other early and late subjects</button>
+        </div>
+        <svg class="torso" id="torso" viewBox="0 0 240 290" role="img" aria-label="Positions of the 12 ECG leads on the body"></svg>
+      </div>
+    </div>
+    <div class="ex-strip-wrap">
+      <div class="ex-strip">
+        <h3 class="ex-title" id="ex-title">ECG of the selected lead pair</h3>
+        <p class="ex-legend note" id="ex-legend"></p>
+        <div class="ex-grid" id="ex-grid"></div>
+        <div class="ex-mesh" id="ex-mesh">
+          <canvas id="ex-canvas"></canvas>
+          <div class="ex-mesh-labels" id="ex-mesh-labels"></div>
+          <p class="viewer-msg" id="mini-msg">Loading…</p>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>Inter-lead delay separates early and late hearts.</b> Cohen's <i>d</i> (lower) and <i>p</i>-value (upper, *** &lt; 10<sup>−4</sup>, ** &lt; 10<sup>−3</sup>, * &lt; 10<sup>−2</sup>) compare the 12 × 12 inter-lead delays of the earliest (≤ 512 ms, n = 7,828) and latest (&gt; 704 ms, n = 4,073) ES octiles, and hovering a cell shows its leads on the body and, for five random early and five random late validation subjects whose T-peak delays all lie within ±100 ms, the ECG of those two leads with each lead's T peak and the delay between them and, under each column, that early and late subject's heart motion on one template.</figcaption>
+  </figure>
+  <figure>
+    <div class="chart" id="chart-es"></div>
+    <figcaption><b>End-systole timing spread.</b> PhysCtrl compresses the true 91 ms spread to 68 ms while Time2Track keeps 91 ms (ratio 0.997), a population property rather than per-subject accuracy.</figcaption>
+  </figure>
+  <details class="fold">
+  <summary>The hand: sEMG timing and joint timing (emg2pose)</summary>
+  <figure class="explorer-fig" id="fig1d">
+    <div class="motion-head">
+      <div class="text">
+        <h3>The same holds for the hand: staggered joints come with staggered sEMG</h3>
+        <p>For surface EMG and hand pose (emg2pose), the 16 forearm channels switch on at different times, and they do so more when the joints of the movement start at different times, which is the timing a decoder must carry from the sEMG to the hand.</p>
+      </div>
+    </div>
+    <div class="explorer">
+      <div class="explorer-map">
+        <div class="chart heat" id="d1-heat"></div>
+        <div class="heat-legend">
+          <span class="note">lower: Cohen's <i>d</i></span><span class="mono" id="d1-dlo"></span><i class="bar-d"></i><span class="mono" id="d1-dhi"></span>
+          <span class="note">upper: <i>p</i></span><span class="mono">0</span><i class="bar-p"></i><span class="mono">1</span>
+        </div>
+      </div>
+      <div class="explorer-detail">
+        <div class="pair-head">
+          <h3 id="d1-title">Channel pair</h3>
+          <p class="note num" id="d1-stats" aria-live="polite"></p>
+          <button type="button" class="btn draw" id="d1-draw">Draw 5 other lockstep and staggered cycles</button>
+        </div>
+        <svg class="torso" id="d1-band" viewBox="0 0 240 250" role="img" aria-label="Positions of the 16 sEMG channels around the forearm"></svg>
+      </div>
+    </div>
+    <div class="ex-strip-wrap">
+      <div class="ex-strip">
+        <h3 class="ex-title" id="d1-ex-title">sEMG of the selected channel pair</h3>
+        <p class="ex-legend note" id="d1-legend"></p>
+        <div class="ex-grid" id="d1-grid"></div>
+        <div class="ex-mesh" id="d1-mesh">
+          <canvas id="d1-canvas"></canvas>
+          <div class="ex-mesh-labels with-title" id="d1-mlab"></div>
+          <p class="viewer-msg" id="d1-msg">Loading…</p>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>sEMG onset lag separates staggered and lockstep movements.</b> Cohen's <i>d</i> (lower) and <i>p</i>-value (upper, *** &lt; 10<sup>−4</sup>, ** &lt; 10<sup>−3</sup>, * &lt; 10<sup>−2</sup>) compare the absolute activation-onset lag of every pair of the 16 sEMG channels between test gesture cycles whose joints start most in lockstep and most staggered, chosen within each of <span id="d1-ns"></span> gestures (bottom and top octile of the gesture's joint onset spread after adjusting for cycle length, <span id="d1-n"></span> cycles of about 0.5 s), where the lag is larger in the staggered cycles for <span id="d1-more"></span> of 120 pairs (<i>p</i> &lt; 0.05). Hovering a cell shows the two channels on the band (numbered as recorded, the band's rotation differs between sessions) and, for five random gestures, a lockstep and a staggered cycle of that gesture with both channels' envelopes, each channel's onset and the lag between them and, under each column, the two cycles' true hands.</figcaption>
+  </figure>
+  <figure>
+    <div class="chart" id="d1-sum"></div>
+    <figcaption><b>Joint timing spread.</b> Across the lockstep and staggered test cycles (<span id="d1-s-n"></span> cycles, 2 kHz predictions, seed <span id="d1-s-seed"></span>, whiskers 95 % bootstrap intervals), EMGFormer compresses the true <span id="d1-s-gt"></span> ms SD of the joint onset spread to <span id="d1-s-e"></span> ms (ratio <span id="d1-s-re"></span>) and with Time2Track keeps <span id="d1-s-t"></span> ms (ratio <span id="d1-s-rt"></span>), the same as with its delay tokens shuffled across channels (<span id="d1-s-sh"></span> ms), so neither keeps the true difference between lockstep and staggered movements (ratios over three seeds: <span id="d1-s-ranges"></span>).</figcaption>
+  </figure>
+  </details>
+</section>
+
+<section id="contributions">
+  <div class="text">
+    <p class="eyebrow">Contributions</p>
+    <h2>What Time2Track adds</h2>
+  </div>
+  <div class="contribs">
+    <div class="contrib">
+      <h3>Delay tokenization on learned wavelets</h3>
+      <p>Time2Track measures each lead's sub-sample lag against lead II at three learned wavelet scales with FFT cross-correlation and a soft-argmax, and gates the resulting delay tokens into the conditioning set.</p>
+    </div>
+    <div class="contrib">
+      <h3>ECG-conditioned 4D motion diffusion</h3>
+      <p>To our knowledge, it is the first generator that conditions 4D cardiac mesh motion on multichannel ECG, through cross-attention in a spatio-temporal Transformer that starts from the subject's rest mesh.</p>
+    </div>
+    <div class="contrib">
+      <h3>A benchmark that measures collapse</h3>
+      <p>On 40,462 ECG and mesh pairs, seven encoders share one diffusion backbone and are scored on diversity (APCR, APDR) and amplitude (PAR) as well as point-wise error, because predicting the mean can look accurate.</p>
+    </div>
+  </div>
+</section>
+
+<section id="method">
+  <div class="text">
+    <p class="eyebrow">Method</p>
+    <h2>Two token streams from one wavelet decomposition</h2>
+    <p>A learnable wavelet front end, initialized from PhysioWave, feeds a morphology branch and a delay branch whose tokens condition a diffusion model that denoises 388 control points over 50 frames.</p>
+  </div>
+  <figure>
+    <div class="plate"><img src="img/method_workflow_fig2.webp" width="1659" height="590" alt="Time2Track framework from the paper: (a) multichannel input, (b) learnable wavelet decomposition, (c) wavelet tokenization, (d) delay tokenization with FFT cross-correlation and Fourier feature lag embedding, (e) conditions, (f) conditional motion diffusion over points and frames, and (g) previous encoders that aggregate channels without time lag."></div>
+    <figcaption><b>Time2Track framework.</b> A learnable wavelet decomposition of the multichannel signal feeds a morphology tokenization and a delay tokenization, and both token sets condition a spatio-temporal motion diffusion model, in contrast to previous encoders that aggregate the channels without time lag (Fig. 2 of the paper).</figcaption>
+  </figure>
+  <div class="duo">
+    <div class="text">
+      <h3>Measuring the lag</h3>
+      <p>For lead <i>c</i> and wavelet scale ℓ, the lag is the soft-argmax of the normalized cross-correlation with lead II within ±τ<sub>max</sub>:</p>
+      <div class="eq">τ̂<sub>c</sub><sup>(ℓ)</sup> = <span class="up">Σ</span><sub>|τ| ≤ τ<sub>max</sub></sub> τ · <span class="up">softmax</span><sub>τ</sub> ( β<sub>ℓ</sub> R<sub>c</sub><sup>(ℓ)</sup>[τ] ),&nbsp;&nbsp; R = <span class="up">𝓕</span><sup>−1</sup>( <span class="up">𝓕</span>W<sub>c</sub> ⊙ <span class="up">conj</span>(<span class="up">𝓕</span>W<sub>r</sub>) ) / ‖W<sub>c</sub>‖ ‖W<sub>r</sub>‖</div>
+      <p>The delay δ<sub>c</sub><sup>(ℓ)</sup> = τ̂<sub>c</sub><sup>(ℓ)</sup> − τ̂<sub>r</sub><sup>(ℓ)</sup> is shift-invariant and differentiable, and the gate α starts at 0 so training begins from the morphology-only encoder.</p>
+    </div>
+    <figure>
+      <div class="plate"><img src="img/method_fftcc.webp" width="1400" height="396" alt="Diagram of FFT cross-correlation: wavelet coefficients of each lead are transformed, multiplied with the conjugate spectrum of the reference lead, and inverse transformed to give a delay per lead and scale."></div>
+      <figcaption><b>FFT cross-correlation.</b> Multiplying each lead's wavelet spectrum by the conjugate spectrum of the reference lead and inverting gives the cross-correlation from which the lag is read.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="metrics">
+  <div class="text">
+    <p class="eyebrow">Metrics</p>
+    <h2>Five metrics for amplitude and inter-subject diversity</h2>
+  </div>
+  <figure class="mx" id="mx">
+    <div class="mx-head">
+      <div class="seg" id="mx-model" role="group" aria-label="Model"></div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-text">
+        <h4>PAR: are local peaks the right size?</h4>
+        <p>A cubic in time is fitted to the trajectory of each point and removed. The cubic carries the slow systolic and diastolic sweep, so the residual keeps the faster local peaks. PAR divides the peak-to-peak range of the predicted residual by the true range, pooled over subjects and averaged over the 388 points and three axes. A value of 1 means local peaks of the true size, and a value below 1 means damped motion.</p>
+        <div class="eq">PAR = mean<sub>v</sub> Σ<sub>i</sub> pp(Pred̂<sub>i,v</sub>) / Σ<sub>i</sub> pp(GT̂<sub>i,v</sub>),&nbsp; pp = max − min over frames</div>
+        <div class="mx-num" id="mx-par-num"></div>
+      </div>
+      <div class="chart" id="mx-par"></div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-text">
+        <h4>APD and APDR: do hearts differ by the right amount?</h4>
+        <p>APD compares every pair of subjects by the RMS distance d<sub>ij</sub> between their detrended whole-heart trajectories and divides the mean distance by the mean RMS amplitude of the same group. Owing to this division, APD measures spread relative to motion size. A model that shrinks every heart by one common factor keeps its APD, and APD falls only when the predicted hearts become alike. APDR is the predicted APD over the true APD, so a value below 1 marks a collapse toward one common motion.</p>
+        <div class="eq">APD = mean<sub>i&lt;j</sub> RMS(X<sub>i</sub> − X<sub>j</sub>) / mean<sub>i</sub> RMS(X<sub>i</sub>),&nbsp; APDR = APD<sub>Pred</sub> / APD<sub>GT</sub></div>
+        <div class="mx-num" id="mx-apd-num"></div>
+      </div>
+      <div class="mx-vis">
+        <div><div class="mx-cap"><b>Ground truth</b><br>d<sub>ij</sub> / mean RMS</div><div class="mx-mat"><canvas id="mx-d-gt" aria-label="Pairwise distance matrix of the ground truth"></canvas></div></div>
+        <div><div class="mx-cap"><b id="mx-d-name"></b><br>d<sub>ij</sub> / mean RMS</div><div class="mx-mat"><canvas id="mx-d-pred" aria-label="Pairwise distance matrix of the selected model"></canvas></div></div>
+        <div class="mx-side"><div class="mx-cap" id="mx-d-pair"></div><div class="chart mx-chart" id="mx-apd"></div></div>
+        <div style="grid-column: 1 / 3"><div class="mx-bar" id="mx-d-bar"></div><div class="mx-bar-lab"><span id="mx-d-lo"></span><span>alike → different</span><span id="mx-d-hi"></span></div></div>
+      </div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-text">
+        <h4>APC and APCR: do hearts differ in timing?</h4>
+        <p>For each subject, the Gram matrix G = XX<sup>⊤</sup> of the detrended trajectory holds the inner product of the whole-heart displacement at every pair of frames, a 49 × 49 timing fingerprint. The RV coefficient scores the agreement of two fingerprints after normalising their size (1 for identical timing structure), and APC is its mean over all pairs. APCR is the predicted APC over the true APC, so a value above 1 means the predicted hearts share one timing pattern more than real hearts do.</p>
+        <div class="eq">RV<sub>ij</sub> = ⟨G<sub>i</sub>, G<sub>j</sub>⟩ / ‖G<sub>i</sub>‖ ‖G<sub>j</sub>‖,&nbsp; APC = mean<sub>i&lt;j</sub> RV<sub>ij</sub>,&nbsp; APCR = APC<sub>Pred</sub> / APC<sub>GT</sub></div>
+        <div class="mx-num" id="mx-apc-num"></div>
+      </div>
+      <div class="mx-vis">
+        <div><div class="mx-cap"><b>Ground truth</b><br>RV<sub>ij</sub></div><div class="mx-mat"><canvas id="mx-rv-gt" aria-label="Pairwise RV coefficient matrix of the ground truth"></canvas></div></div>
+        <div><div class="mx-cap"><b id="mx-rv-name"></b><br>RV<sub>ij</sub></div><div class="mx-mat"><canvas id="mx-rv-pred" aria-label="Pairwise RV coefficient matrix of the selected model"></canvas></div></div>
+        <div class="mx-side"><div class="mx-cap" id="mx-rv-pair"></div><div class="mx-fp" id="mx-fp"></div></div>
+        <div style="grid-column: 1 / 3"><div class="mx-bar" id="mx-rv-bar"></div><div class="mx-bar-lab"><span id="mx-rv-lo"></span><span>different → alike</span><span>1</span></div></div>
+      </div>
+    </div>
+  </figure>
+</section>
+
+<section id="results">
+  <div class="text">
+    <p class="eyebrow">Results</p>
+    <h2>Diversity is preserved, at a cost in point-wise error</h2>
+  </div>
+  <div class="analyses rows">
+    <div class="analysis">
+      <h3>Whole-heart vertex trajectories (Table 1)</h3>
+      <p>RV and RMSE score the global trajectory, PAR the detrended amplitude, and APCR and APDR the inter-subject diversity (1 = true), with the ± of the diversity columns being the SD over 10,000 paired subject bootstrap resamples.</p>
+      <figure><div class="plate scroll"><div class="sizer"><img src="img/cr_tab1_whole_heart.webp" style="width: 97.4%" width="1681" height="425" loading="lazy" alt="Table 1 of the paper: RV coefficient, RMSE, PAR, |APCR−1| and |APDR−1| for CNN, TeCh, PhysioWave, ShiftInvariant, Delay-T, Delay-QRS and Ours. Ours has the best RV 0.637, PAR 0.896, |APCR−1| 0.034 and |APDR−1| 0.019, and TeCh the best RMSE 0.129."></div></div></figure>
+    </div>
+  </div>
+  <figure>
+    <div class="plate"><img src="img/exp_radar.webp" width="1800" height="555" loading="lazy" alt="Four radar charts of APC and APD ratios on face area and vertex trajectory across five heart regions. Time2Track's solid red line lies on the outer ring of 1.0 in every region, while baselines draw inward."></div>
+    <figcaption><b>Regional diversity.</b> Across five heart regions Time2Track (solid red) stays on the ideal ratio of 1.0 while most encoders draw inward, under-estimating how much hearts differ.</figcaption>
+  </figure>
+  <figure>
+    <div class="plate"><img src="img/exp_surface_apd.webp" width="1800" height="612" loading="lazy" alt="Heart meshes from lateral, anterior and posterior views colored by the average pairwise distance of vertex speed. Ground truth and Time2Track show dark, heterogeneous patterns, while CNN and TeCh are uniformly yellow."></div>
+    <figcaption><b>Where hearts differ.</b> Inter-subject distance of vertex speed is nearly uniform on the mesh for CNN, TeCh and ShiftInvariant, while Time2Track reproduces the heterogeneous ground-truth pattern most closely.</figcaption>
+  </figure>
+  <figure>
+    <div class="plate"><img src="img/exp_delaymap_fig6.webp" width="1628" height="747" loading="lazy" alt="Qualitative comparison from the paper: a right-ventricular vertex, true 3D trajectories and speed profiles of two subjects, predicted trajectories and speed bands of CNN, TeCh, PhysioWave, ShiftInvariant, Delay-T, Delay-QRS, Ours and the ground truth, and multi-scale delay maps of the two subjects over the 12 ECG leads."></div>
+    <figcaption><b>Trajectories and delay maps.</b> At one right-ventricular vertex, true trajectories and speed profiles differ between subjects (b), the baselines collapse to a narrow bundle with flat speed while Time2Track recovers the spread of the truth (c), and the subject-specific multi-scale delay maps condition this spread (d) (Fig. 6 of the paper).</figcaption>
+  </figure>
+</section>
+
+<section id="analyses">
+  <div class="text">
+    <p class="eyebrow">Analyses</p>
+    <h2>Pathology, ECG-only use, emg2pose, and ablations</h2>
+    <p>These analyses were run during the review discussion and appear in the camera-ready paper (Section 4 and Appendix A.6 to A.9), with the tables typeset as in the paper.</p>
+  </div>
+  <div class="analyses rows">
+    <div class="analysis">
+      <h3>Subjects with cardiac disease</h3>
+      <p>Change from an equal number of randomly sampled healthy subjects to the 981 validation subjects with a cardiac ICD-10 code (Δ = diseased minus healthy, lower is better, best of each column in bold). Time2Track has the smallest RMSE change and the only decrease of |APCR−1|, which rises by 0.034 for CNN and by 0.064 for TeCh, while its |PAR−1| and |APDR−1| change by less than 0.01.</p>
+      <figure><div class="plate scroll"><div class="sizer"><img src="img/an_pathology_delta.webp" style="width: 87.8%" width="1364" height="226" loading="lazy" alt="Table of the change from healthy to diseased subjects. Ours: RMSE +0.001, |PAR−1| +0.009, |APCR−1| −0.025, |APDR−1| +0.004. CNN: +0.005, −0.007, +0.034, −0.001. TeCh: +0.005, +0.008, +0.064, −0.005."></div></div></figure>
+    </div>
+    <div class="analysis">
+      <h3>Downstream application with ECG as the only input</h3>
+      <p>Without cardiac imaging at inference, Time2Track generates the 4D heart from the resting ECG alone by replacing the subject's rest mesh p<sub>0</sub> with the population average, without retraining. Fidelity drops (RV −0.046, RMSE +0.031), while the diversity stays close to the truth (|APCR−1| 0.052, |APDR−1| 0.036).</p>
+      <figure><div class="plate scroll"><div class="sizer"><img src="img/an_ecg_only_p0.webp" style="width: 57.4%" width="892" height="309" loading="lazy" alt="Table comparing Time2Track with its own rest mesh and with the population-average rest mesh: RV 0.637 and 0.591, PAR 0.896 and 0.867, |APCR−1| 0.034 and 0.052, |APDR−1| 0.019 and 0.036, RMSE 0.151 and 0.182."></div></div></figure>
+    </div>
+    <div class="analysis wide">
+      <h3>Application to emg2pose</h3>
+      <p>Adding delay tokens to two sEMG decoders of hand pose on the held-out test split of emg2pose lowers |PAR−1| of EMGFormer in every subset and |APCR−1| of both decoders in four of the five subsets, while RMSE and |APDR−1| change by less than 0.01 (three training seeds per model).</p>
+      <figure><div class="plate scroll"><div class="sizer"><img src="img/an_emg2pose_delta_e39e.webp" width="1703" height="467" loading="lazy" alt="Four panels of the change in RMSE, |PAR−1|, |APCR−1| and |APDR−1|, model with delay tokens minus baseline, for EMGFormer and vemg2pose over all stages and four gesture stages, with seed dots and mean ± SD bars around zero."></div></div></figure>
+    </div>
+    <div class="analysis">
+      <h3>Ablation study #1: electrode noise and missing leads</h3>
+      <p>On the diseased subgroup, noise down to 5 dB SNR costs at most 3% fidelity with unchanged diversity, and dropping the reference lead II leaves fidelity intact but raises |APCR−1|.</p>
+      <figure><div class="plate scroll"><div class="sizer"><img src="img/cr_tab6_noise_dropout.webp" style="width: 100.0%" width="1554" height="393" loading="lazy" alt="Table of RV, RMSE, PAR, |APCR−1| and |APDR−1| for clean input, noise at 20, 10 and 5 dB SNR, and dropped leads V2, II and V1 to V3. Dropping lead II raises |APCR−1| from 0.027 to 0.108."></div></div></figure>
+    </div>
+    <div class="analysis">
+      <h3>Ablation study #2: lag window τ<sub>max</sub></h3>
+      <p>Changing τ<sub>max</sub> at inference across a 4× range moves no metric outside its bootstrap interval (95% intervals for RV and RMSE, default in bold).</p>
+      <figure><div class="plate scroll"><div class="sizer"><img src="img/cr_tab7_taumax.webp" style="width: 95.9%" width="1490" height="258" loading="lazy" alt="Table of metrics for τmax of 25, 50, 75 and 100 frames (±50 to ±200 ms). RV stays between 0.565 and 0.570 and RMSE at 0.181 with overlapping intervals."></div></div></figure>
+    </div>
+    <div class="analysis">
+      <h3>Ablation study #3: reference lead</h3>
+      <p>Retraining Time2Track with aVR or aVL instead of lead II as the reference degrades the performance. The first row repeats Table 1.</p>
+      <figure><div class="plate scroll"><div class="sizer"><img src="img/cr_tab8_reflead.webp" style="width: 85.6%" width="1330" height="227" loading="lazy" alt="Table of metrics for reference leads II, aVR and aVL. Lead II: RV 0.637, RMSE 0.151, PAR 0.896, |APCR−1| 0.034, |APDR−1| 0.019. aVR and aVL have lower RV and higher RMSE."></div></div></figure>
+    </div>
+  </div>
+</section>
+
+<section id="limitations">
+  <div class="text">
+    <p class="eyebrow">Limitations</p>
+    <h2>What these results do not show</h2>
+  </div>
+  <ul class="limits">
+    <li>The UK Biobank split has no separate test set, so although no reported metric entered checkpoint selection, every number comes from the split that selected the checkpoint.</li>
+    <li>Time2Track preserves the population spread of motion timing, but its per-subject ES error does not beat a constant population mean.</li>
+    <li>The cohort is about 90% healthy with registry-coded diagnoses, so severe or acute pathology is untested.</li>
+    <li>388 control points are coarser than the ventricular wall, so regional wall-motion abnormalities are out of reach for both the model and the metrics.</li>
+    <li>Time2Track still needs one rest mesh from an existing scan, and a population template in its place keeps most diversity but costs geometric accuracy.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  <p><b>Data.</b> UK Biobank data are available to approved researchers at ukbiobank.ac.uk, and the subjects shown on this page carry no identifiers.</p>
+  <p><b>Code.</b> <a href="https://github.com/Chrisa142857/time2track">github.com/Chrisa142857/time2track</a>. Built on the PhysCtrl motion diffusion implementation.</p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="skin.js"></script>
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const text = (parent, x, y, s, attrs = {}) => { const t = el('text', { x, y, ...attrs }, parent); t.textContent = s; return t; };
+
+  const lerpStops = (stops, t) => {
+    t = Math.min(1, Math.max(0, t)) * (stops.length - 1);
+    const i = Math.min(stops.length - 2, Math.floor(t)), u = t - i;
+    const a = [1, 3, 5].map(k => parseInt(stops[i].slice(k, k + 2), 16)), b = [1, 3, 5].map(k => parseInt(stops[i + 1].slice(k, k + 2), 16));
+    return a.map((v, k) => Math.round(v + (b[k] - v) * u));
+  };
+  const COOLWARM = ['#3b4cc0', '#8db0fe', '#dddddd', '#f4987a', '#b40426'];
+  const YLGNBU = ['#ffffd9', '#c7e9b4', '#41b6c4', '#225ea8', '#081d58'];
+  const pText = p => p < 1e-4 ? '***' : p < 1e-3 ? '**' : p < 1e-2 ? '*' : p.toFixed(2);
+  const pTip = p => p < 1e-4 ? 'p < 0.0001' : 'p = ' + p.toPrecision(2);
+
+  /* ---------- Fig. 1b explorer: heatmap, lead positions, group-mean ECG and heart motion ---------- */
+  (function fig1b() {
+    const host = document.getElementById('chart-fig1b');
+    const EARLY = '#2f6bd8', LATE = '#c4512b';
+
+    /* lead positions on a front view of the torso (viewer's left = patient's right) */
+    const torso = document.getElementById('torso');
+    const ELEC = { RA: [46, 80], LA: [194, 80], LL: [150, 258], RL: [90, 258] }, HEART = [130, 148];
+    // limb leads have no electrode of their own: I, II, III join two limb electrodes, and aVR, aVL, aVF point from
+    // one electrode toward the heart (drawn short so they stay off the chest leads); NODES lists the electrodes each lead uses
+    const LIMB = { I: ['RA', 'LA'], II: ['RA', 'LL'], III: ['LA', 'LL'], aVR: ['RA', 'C'], aVL: ['LA', 'C'], aVF: ['LL', 'C'] };
+    const NODES = { I: ['RA', 'LA'], II: ['RA', 'LL'], III: ['LA', 'LL'], aVR: ['RA'], aVL: ['LA'], aVF: ['LL'] };
+    const LIMB_LABEL = { I: [120, 72], II: [80, 178], III: [184, 206], aVR: [30, 100], aVL: [210, 100], aVF: [168, 248] };
+    // chest electrode position, label position (each label on the side away from neighbouring electrodes and lines)
+    const CHEST = { V1: [[108, 140], [95, 143]], V2: [[130, 140], [130, 131]], V3: [[144, 152], [136, 165]],
+                    V4: [[158, 165], [158, 179]], V5: [[176, 165], [178, 179]], V6: [[194, 160], [208, 162]] };
+    const torsoParts = {}, node = {};
+    el('path', { class: 'body', d: 'M102 18 L138 18 L142 42 Q196 46 212 70 Q222 120 226 186 L208 188 L200 120 L192 196 L190 276 L50 276 L48 196 L40 120 L32 188 L14 186 Q18 120 28 70 Q44 46 98 42 Z' }, torso);
+    el('ellipse', { class: 'heart', cx: HEART[0], cy: HEART[1], rx: 20, ry: 16, transform: `rotate(-30 ${HEART[0]} ${HEART[1]})` }, torso);
+    const P = k => k === 'C' ? HEART : ELEC[k];
+    const axes = {};
+    for (const [ld, [a, b]] of Object.entries(LIMB)) {
+      const [x1, y1] = P(a), [bx, by] = P(b), short = b === 'C' ? 0.42 : 1;
+      axes[ld] = el('line', { x1, y1, x2: x1 + short * (bx - x1), y2: y1 + short * (by - y1), class: 'axis' }, torso);
+    }
+    for (const [k, [x, y]] of Object.entries(ELEC))
+      node[k] = [el('circle', { cx: x, cy: y, r: 5, class: 'elec limb' }, torso),
+                 text(torso, x, y + (y > 200 ? 15 : -8), k, { 'text-anchor': 'middle', class: 'tag' })];
+    for (const [ld, [lx, ly]] of Object.entries(LIMB_LABEL))
+      torsoParts[ld] = [axes[ld], text(torso, lx, ly + 3, ld, { 'text-anchor': 'middle' }), ...NODES[ld].flatMap(k => node[k])];
+    for (const [ld, [[x, y], [lx, ly]]] of Object.entries(CHEST))
+      torsoParts[ld] = [el('circle', { cx: x, cy: y, r: 4.5, class: 'elec' }, torso), text(torso, lx, ly + 3, ld, { 'text-anchor': 'middle' })];
+    let cur = [];
+    const allParts = new Set(Object.values(torsoParts).flat());
+    const highlight = leads => {                      // union first: one electrode can belong to several leads
+      const on = new Set(leads.flatMap(ld => torsoParts[ld] || []));
+      allParts.forEach(p => p.classList.toggle('on', on.has(p)));
+    };
+
+    fetch('fig1b.json').then(r => r.json()).then(j => {
+      const n = j.leads.length, C = 36, L = 40, T = 6, B = 40, W = L + n * C + 6, H = T + n * C + B;
+      let dmax = 0;
+      j.d.forEach(r => r.forEach(v => { if (v !== null) dmax = Math.max(dmax, Math.abs(v)); }));
+      dmax = Math.ceil(dmax * 20) / 20;
+      document.getElementById('d-lo').textContent = (-dmax).toFixed(2);
+      document.getElementById('d-hi').textContent = '+' + dmax.toFixed(2);
+      const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Matrix of inter-lead delay differences between early and late end-systole groups, ${j.n_significant} of ${j.n_pairs} lead pairs significant` }, host);
+      const hot = new Set(['V2', 'V3']), cells = {};
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+        if (r === c) continue;
+        const x = L + c * C, y = T + r * C, up = c > r;
+        const v = up ? j.p[r][c] : j.d[r][c];
+        if (v === null) continue;
+        const rgb = up ? lerpStops(YLGNBU, v) : lerpStops(COOLWARM, (v / dmax + 1) / 2);
+        const lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+        const rect = el('rect', { x, y, width: C - 1, height: C - 1, fill: `rgb(${rgb})`, class: 'cell', tabindex: 0, 'aria-label': `${j.leads[r]} and ${j.leads[c]}` }, svg);
+        el('title', {}, rect).textContent = `${j.leads[r]} vs ${j.leads[c]}: Cohen's d ${j.d[r][c].toFixed(3)}, ${pTip(j.p[r][c])}`;
+        text(svg, x + (C - 1) / 2, y + C / 2 + 3, up ? pText(v) : v.toFixed(2), { 'text-anchor': 'middle', class: 'cell-t', style: 'fill:' + (lum > 0.55 ? '#1d2230' : '#ffffff') });
+        const go = () => select(r, c);
+        rect.addEventListener('mouseenter', go); rect.addEventListener('focus', go); rect.addEventListener('click', go);
+        cells[r + ',' + c] = rect;
+      }
+      j.leads.forEach((ld, i) => {
+        const cls = 'lbl' + (hot.has(ld) ? ' ours' : '');
+        const a = text(svg, L - 6, T + i * C + C / 2 + 4, ld, { 'text-anchor': 'end', class: cls });
+        const b = text(svg, 0, 0, ld, { 'text-anchor': 'end', class: cls, transform: `translate(${L + i * C + C / 2 + 3},${T + n * C + 8}) rotate(-45)` });
+        for (const t of [a, b]) { t.addEventListener('mouseenter', () => highlight([ld])); t.addEventListener('mouseleave', () => highlight(cur)); }
+      });
+
+      /* five random early and five random late subjects: ECG of the selected leads (two rows) and each column's two hearts (below) */
+      const X = j.examples, M = j.example_mesh, NCOL = 5;
+      const b64i16 = str => new Int16Array(Uint8Array.from(atob(str), ch => ch.charCodeAt(0)).buffer);
+      for (const g of ['early', 'late']) X[g].forEach((e, i) => Object.assign(e, { sig: b64i16(e.ecg), pos: b64i16(M[g][i].pos), es: M[g][i].es }));
+      const MSPS = 1000 / X.fs, NS = X.samples, tEnd = (NS - 1) * MSPS, MS = M.ms_per_frame, F = M.frames, NP = 388;
+      const wrap = dS => ((dS + NS / 2) % NS + NS) % NS - NS / 2;          // circular, as in the notebook
+      const drawN = arr => {
+        const idx = arr.map((_, i) => i);
+        for (let i = idx.length - 1; i > 0; i--) { const k = Math.floor(Math.random() * (i + 1)); [idx[i], idx[k]] = [idx[k], idx[i]]; }
+        return idx.slice(0, NCOL).map(i => arr[i]);
+      };
+      let cols = { early: drawN(X.early), late: drawN(X.late) }, sel = null, ecgHeads = [];
+      const grid = document.getElementById('ex-grid');
+      const EW = 200, EH = 140, EL = 30, ER = 4, ET = 4, EB = 28, TOP = ET + 18, YB = EH - EB;
+      const ex = t => EL + (t / tEnd) * (EW - EL - ER);
+      let uid = 0;
+      function ecgCell(g, e, r, c) {
+        const svgE = el('svg', { viewBox: `0 0 ${EW} ${EH}`, role: 'img', 'aria-label': `${g} ES subject, leads ${j.leads[r]} and ${j.leads[c]}` });
+        const id = 'arr' + (uid++), mk = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 5, markerHeight: 5, orient: 'auto-start-reverse' }, el('defs', {}, svgE));
+        el('path', { d: 'M0 0 L10 5 L0 10 Z', fill: g === 'early' ? EARLY : LATE }, mk);
+        const seg = k => Array.from(e.sig.subarray(k * NS, (k + 1) * NS), v => v * X.scale);
+        const A = seg(r), B = seg(c), lo = Math.min(...A, ...B), hi = Math.max(...A, ...B);
+        const y = v => TOP + (hi - v) / (hi - lo) * (YB - TOP);
+        /* axes: time in ms (x), z-scored ECG amplitude (y), the scale of the per-subject normalised input */
+        el('line', { x1: EL, x2: EW - ER, y1: YB, y2: YB, class: 'ax' }, svgE);
+        el('line', { x1: EL, x2: EL, y1: TOP - 2, y2: YB, class: 'ax' }, svgE);
+        const span = hi - lo, step = [0.5, 1, 2, 5, 10].find(q => span / q <= 4) || 20;
+        for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) {
+          el('line', { x1: EL - 3, x2: EL, y1: y(v), y2: y(v), class: 'ax' }, svgE);
+          text(svgE, EL - 5, y(v) + 3, +v.toFixed(1), { 'text-anchor': 'end', class: 'tick-s' });
+        }
+        text(svgE, 0, 0, 'ECG (z)', { 'text-anchor': 'middle', class: 'ax-t', transform: `translate(8,${((TOP + YB) / 2).toFixed(1)}) rotate(-90)` });
+        text(svgE, (EL + EW - ER) / 2, EH - 3, 'time (ms)', { 'text-anchor': 'middle', class: 'ax-t' });
+        for (const [v, cls] of [[A, ''], [B, ' b']]) {
+          let d = '';
+          for (let k = 0; k < NS; k++) d += (k ? 'L' : 'M') + ex(k * MSPS).toFixed(1) + ' ' + y(v[k]).toFixed(1);
+          el('path', { d, class: 'ecg-' + g + cls }, svgE);
+        }
+        const ta = e.t_peak[r], tb = e.t_peak[c];
+        for (const [tp, cls] of [[ta, ''], [tb, ' b']]) if (tp !== null) el('line', { x1: ex(tp * MSPS), x2: ex(tp * MSPS), y1: TOP - 2, y2: YB, class: 'tp-' + g + cls }, svgE);
+        if (ta !== null && tb !== null) {
+          const dS = wrap(tb - ta), dms = dS * MSPS, clamp = v => Math.min(EW - ER, Math.max(EL, v));
+          const xa = ex(ta * MSPS), xb = clamp(ex((ta + dS) * MSPS));
+          el('rect', { x: Math.min(xa, xb), y: TOP - 2, width: Math.max(Math.abs(xb - xa), 1.5), height: YB - TOP + 2, class: 'band-' + g }, svgE);
+          if (Math.abs(xb - xa) > 8) el('line', { x1: xa, x2: xb, y1: TOP + 4, y2: TOP + 4, class: 'brk-' + g, 'marker-start': `url(#${id})`, 'marker-end': `url(#${id})` }, svgE);
+          text(svgE, Math.min(EW - ER - 34, Math.max(EL + 34, (xa + xb) / 2)), ET + 11, `Δ ${dms > 0 ? '+' : ''}${dms.toFixed(0)} ms`, { 'text-anchor': 'middle', class: 'brk-t-' + g });
+        }
+        ecgHeads.push(el('line', { x1: ex(0), x2: ex(0), y1: TOP - 2, y2: YB, class: 'playhead' }, svgE));
+        for (let t = 0; t <= tEnd; t += 400) {
+          el('line', { x1: ex(t), x2: ex(t), y1: YB, y2: YB + 3, class: 'ax' }, svgE);
+          text(svgE, ex(t), YB + 12, t, { 'text-anchor': 'middle', class: 'tick-s' });
+        }
+        return svgE;
+      }
+      function drawECG(r, c) {
+        grid.replaceChildren(); ecgHeads = [];
+        for (const g of ['early', 'late']) for (const e of cols[g]) {
+          const cell = document.createElement('div'); cell.className = 'ex-cell'; cell.appendChild(ecgCell(g, e, r, c)); grid.appendChild(cell);
+        }
+        document.getElementById('ex-title').textContent = `ECG of leads ${j.leads[r]} and ${j.leads[c]}, 5 early and 5 late ES subjects`;
+        document.getElementById('ex-legend').textContent =
+          `Top row: early ES subjects (blue). Bottom row: late ES subjects (orange). ${j.leads[r]} solid, ${j.leads[c]} dashed, vertical lines at each lead's T peak, Δ = ${j.leads[c]} minus ${j.leads[r]}. Below: each column's two hearts.`;
+        placeHeads(frame);
+      }
+      let frame = 0;                      // the strip always plays (ZW)
+      function placeHeads(f) {
+        const t = f * MS, on = t <= tEnd;
+        for (const h of ecgHeads) { h.style.display = on ? '' : 'none'; if (on) { h.setAttribute('x1', ex(t)); h.setAttribute('x2', ex(t)); } }
+      }
+      function select(r, c) {
+        Object.values(cells).forEach(x => x.classList.remove('sel'));
+        cells[r + ',' + c].classList.add('sel');
+        const a = j.leads[r], b = j.leads[c], dm = j.tpeak_delay_mean;
+        cur = [a, b]; highlight(cur); sel = [r, c];
+        const sg = v => (v > 0 ? '+' : '') + v.toFixed(1);
+        document.getElementById('pair-title').textContent = `${a} and ${b}`;
+        document.getElementById('pair-stats').textContent =
+          `Heatmap: Cohen's d ${j.d[r][c].toFixed(2)}, ${pTip(j.p[r][c])} · T peak of ${b} relative to ${a}, mean over subjects: early ${sg(dm.early[r][c])} ms, late ${sg(dm.late[r][c])} ms`;
+        drawECG(r, c);
+      }
+
+      /* heart motion of each column's early and late subject, overlaid on one template, on the ECG's clock */
+      const canvas = document.getElementById('ex-canvas'), msg = document.getElementById('mini-msg'), mlab = document.getElementById('ex-mesh-labels');
+      let renderer = null;
+      if (window.THREE && THREE.OrbitControls) { try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); msg.hidden = true; } catch (e) { msg.textContent = 'This browser cannot display WebGL.'; } }
+      else msg.textContent = 'The 3D view could not load its WebGL library.';
+      let camera, controls, views = [];
+      if (renderer) {
+        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+        renderer.setClearColor(0x000000, 0);
+        renderer.setScissorTest(true);
+        camera = new THREE.PerspectiveCamera(28, 1, 1, 4000);
+        const R = 330, elev = 20 * Math.PI / 180;
+        camera.position.set(0, R * Math.sin(elev), R * Math.cos(elev));
+        controls = new THREE.OrbitControls(camera, canvas);
+        controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false;
+        for (let k = 0; k < NCOL; k++) {
+          const scene = new THREE.Scene(), geos = [];
+          scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+          const light = new THREE.DirectionalLight(0xffffff, 0.8); scene.add(light);
+          for (const col of [EARLY, LATE]) {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NP * 3), 3));
+            scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: new THREE.Color(col), transparent: true, opacity: 0.42, depthWrite: false, flatShading: true, shininess: 20, side: THREE.FrontSide })));
+            geos.push(geo);
+          }
+          views.push({ scene, light, geos });
+        }
+      }
+      function labelMeshes() {
+        mlab.replaceChildren(...cols.early.map((e, k) => {
+          const d = document.createElement('div'), a = document.createElement('span'), b = document.createElement('span');
+          a.className = 'e'; b.className = 'l';
+          a.textContent = `ES ${e.es * MS} ms`; b.textContent = `ES ${cols.late[k].es * MS} ms`;
+          d.append(a, b); return d;
+        }));
+      }
+      const sizeMesh = () => {
+        if (!renderer) return;
+        const w = canvas.clientWidth, h = canvas.clientHeight;
+        renderer.setSize(w, h, false); camera.aspect = (w / NCOL) / h; camera.updateProjectionMatrix();
+      };
+      function setFrame(f) {
+        placeHeads(f);
+        if (!renderer || !views[0].geos[0].index) return;
+        views.forEach((v, k) => [cols.early[k], cols.late[k]].forEach((e, gi) => {
+          const geo = v.geos[gi], pos = geo.attributes.position.array, off = f * NP * 3;
+          for (let i = 0; i < NP; i++) { const q = 3 * i; pos[q] = e.pos[off + q] * M.scale; pos[q + 1] = e.pos[off + q + 2] * M.scale; pos[q + 2] = -e.pos[off + q + 1] * M.scale; }
+          geo.attributes.position.needsUpdate = true; geo.computeVertexNormals(); geo.computeBoundingSphere();
+        }));
+      }
+      document.getElementById('ex-draw').addEventListener('click', () => {
+        cols = { early: drawN(X.early), late: drawN(X.late) };
+        if (sel) drawECG(sel[0], sel[1]);
+        labelMeshes(); setFrame(frame);
+      });
+      let best = [1, 0], bv = 0;
+      for (let r = 0; r < n; r++) for (let c = 0; c < r; c++) if (Math.abs(j.d[r][c]) > bv) { bv = Math.abs(j.d[r][c]); best = [r, c]; }
+      select(best[0], best[1]);
+      labelMeshes();
+      (function waitFaces() {          // mesh faces arrive with viewer.json
+        if (!renderer) return;
+        if (!window.T2T_FACES) return setTimeout(waitFaces, 100);
+        views.forEach(v => v.geos.forEach(g => g.setIndex(window.T2T_FACES)));
+        sizeMesh(); setFrame(frame);
+      })();
+      window.addEventListener('resize', sizeMesh);
+      let last = performance.now(), acc = 0;
+      (function loop(now) {
+        const dt = Math.min(200, now - last); last = now;
+        { acc += dt * 0.5; if (acc >= MS) { const k = Math.floor(acc / MS); acc -= k * MS; frame = (frame + k) % F; setFrame(frame); } }
+        if (renderer && views[0].geos[0].index) {
+          controls.update();
+          const w = canvas.clientWidth, h = canvas.clientHeight, cw = w / NCOL;
+          views.forEach((v, k) => {
+            renderer.setViewport(k * cw, 0, cw, h); renderer.setScissor(k * cw, 0, cw, h);
+            v.light.position.copy(camera.position); renderer.render(v.scene, camera);
+          });
+        }
+        requestAnimationFrame(loop);
+      })(last);
+    }).catch(() => { host.textContent = 'The Fig. 1b data could not be loaded.'; });
+  })();
+
+  /* ---------- ES timing spread (ms) ---------- */
+  (function esChart() {
+    const host = document.getElementById('chart-es');
+    const data = [
+      { n: 'Ground truth', v: 91.2, cls: 'bar-gt' },
+      { n: 'Time2Track', v: 91.0, lo: 88.7, hi: 93.1, cls: 'bar-ours', ours: true },
+      { n: 'PhysCtrl', v: 68.0, lo: 66.3, hi: 69.7, cls: 'bar-base' },
+    ];
+    const W = 720, L = 150, R = 70, T = 10, rowH = 34, H = T + data.length * rowH + 52, YB = H - 46;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Standard deviation of end-systole timing across validation subjects: ground truth 91.2 ms, Time2Track 91.0 ms, PhysCtrl 68.0 ms' }, host);
+    const x = v => L + (v / 100) * (W - L - R);
+    for (let v = 0; v <= 100; v += 20) {
+      el('line', { x1: x(v), x2: x(v), y1: T, y2: YB, class: v ? 'gridline' : 'axis' }, svg);
+      text(svg, x(v), YB + 16, v, { 'text-anchor': 'middle' });
+    }
+    el('line', { x1: x(0), x2: x(100), y1: YB, y2: YB, class: 'axis' }, svg);
+    text(svg, x(50), H - 6, 'SD of end-systole time across 8,093 validation subjects (ms)', { 'text-anchor': 'middle', class: 'lbl' });
+    text(svg, 0, 0, 'model', { 'text-anchor': 'middle', class: 'lbl', transform: `translate(14,${((T + YB) / 2).toFixed(1)}) rotate(-90)` });
+    el('line', { x1: x(91.2), x2: x(91.2), y1: T, y2: YB, class: 'ideal' }, svg);
+    data.forEach((d, i) => {
+      const y = T + i * rowH + 8;
+      text(svg, L - 10, y + 13, d.n, { 'text-anchor': 'end', class: 'lbl' + (d.ours ? ' ours' : '') });
+      el('rect', { x: x(0), y, width: x(d.v) - x(0), height: 18, class: d.cls }, svg);
+      if (d.lo) {
+        el('line', { x1: x(d.lo), x2: x(d.hi), y1: y + 9, y2: y + 9, class: 'whisk' }, svg);
+        el('line', { x1: x(d.lo), x2: x(d.lo), y1: y + 4, y2: y + 14, class: 'whisk' }, svg);
+        el('line', { x1: x(d.hi), x2: x(d.hi), y1: y + 4, y2: y + 14, class: 'whisk' }, svg);
+      }
+      text(svg, x(Math.max(d.v, d.hi || 0)) + 8, y + 13, d.v.toFixed(1), { class: 'lbl' + (d.ours ? ' ours' : '') });
+    });
+  })();
+
+
+
+  /* ---------- metric explainer: PAR, APD/APDR and APC/APCR recomputed on real subjects (metrics.json) ---------- */
+  (function metricExplainer() {
+    const ORANGES = ['#fff5eb', '#fdbe85', '#fd8d3c', '#d94701', '#7f2704'];
+    fetch('metrics.json').then(r => r.json()).then(D => {
+      const n = D.n_xsubj, T = D.frames, GT = D.sources[0], MODELS = D.sources.slice(1), AX = D.point.axis;
+      const buf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0)).buffer;
+      const sym = (s, diag) => {                           // upper triangle (i < j, display order) -> full matrix in [0, 1]
+        const u = new Uint8Array(buf(s)), M = new Float32Array(n * n); let k = 0;
+        for (let i = 0; i < n; i++) { M[i * n + i] = diag; for (let j = i + 1; j < n; j++, k++) M[i * n + j] = M[j * n + i] = u[k] / 255; }
+        return M;
+      };
+      const S = {};
+      for (const s of D.sources) S[s] = { rv: sym(D.mats[s].rv, 1), d: sym(D.mats[s].d, 0), raw: new Int16Array(buf(D.curves[s].raw)),
+                                          trend: new Int16Array(buf(D.curves[s].trend)), gram: new Int8Array(buf(D.gram[s])) };
+      const NT = T * (T + 1) / 2, TRI = new Int32Array(T * T);                    // (s, t) -> index into the packed upper triangle incl. the diagonal
+      for (let i = 0, k = 0; i < T; i++) for (let j = i; j < T; j++, k++) TRI[i * T + j] = TRI[j * T + i] = k;
+      const value = (key, v) => D.range[key][0] + v * (D.range[key][1] - D.range[key][0]);
+      const curve = (s, q, key) => Array.from({ length: T }, (_, t) => S[s][key][q * T + t] / 100);
+      const resid = (s, q) => { const r = curve(s, q, 'raw'), tr = curve(s, q, 'trend'); return r.map((v, t) => v - tr[t]); };
+      const pp = c => Math.max(...c) - Math.min(...c);
+      let model = 'Time2Track', [pa, pb] = D.default_pair;
+      const ours = () => model === 'Time2Track' ? ' ours' : '';
+
+      const paint = (cv, size, f) => {
+        cv.width = cv.height = size;
+        const ctx = cv.getContext && cv.getContext('2d'); if (!ctx) return;
+        const img = ctx.createImageData(size, size);
+        for (let k = 0; k < size * size; k++) { const c = f(k); img.data[4 * k] = c[0]; img.data[4 * k + 1] = c[1]; img.data[4 * k + 2] = c[2]; img.data[4 * k + 3] = 255; }
+        ctx.putImageData(img, 0, 0);
+      };
+      const cvs = { d: [document.getElementById('mx-d-gt'), document.getElementById('mx-d-pred')], rv: [document.getElementById('mx-rv-gt'), document.getElementById('mx-rv-pred')] };
+      const marks = [...cvs.d, ...cvs.rv].map(cv => { const m = document.createElement('div'); m.className = 'mx-mark'; cv.parentNode && cv.parentNode.appendChild(m); return m; });
+      const drawMats = () => {
+        cvs.d.forEach((cv, k) => paint(cv, n, i => lerpStops(YLGNBU, S[k ? model : GT].d[i])));
+        cvs.rv.forEach((cv, k) => paint(cv, n, i => lerpStops(ORANGES, S[k ? model : GT].rv[i])));
+      };
+      const grad = stops => `linear-gradient(90deg, ${stops.join(', ')})`;
+      document.getElementById('mx-d-bar').style.background = grad(YLGNBU);
+      document.getElementById('mx-rv-bar').style.background = grad(ORANGES);
+      document.getElementById('mx-d-lo').textContent = '0';
+      document.getElementById('mx-d-hi').textContent = D.range.d[1].toFixed(2);
+      document.getElementById('mx-rv-lo').textContent = D.range.rv[0].toFixed(2);
+      const pick = (cv, e) => {
+        const r = cv.getBoundingClientRect();
+        const j = Math.floor((e.clientX - r.left) / r.width * n), i = Math.floor((e.clientY - r.top) / r.height * n);
+        if (i === j || Math.min(i, j) < 0 || Math.max(i, j) >= n) return;
+        [pa, pb] = [Math.min(i, j), Math.max(i, j)]; drawPair();
+      };
+      [...cvs.d, ...cvs.rv].forEach(cv => cv.addEventListener('click', e => pick(cv, e)));
+
+      const ticks = (lo, hi, k = 4) => {
+        const raw = (hi - lo) / k, mag = 10 ** Math.floor(Math.log10(raw)), st = [1, 2, 5, 10].map(m => m * mag).find(m => m >= raw);
+        const out = []; for (let v = Math.ceil(lo / st) * st; v <= hi + 1e-9; v += st) out.push(+v.toFixed(6));
+        return out;
+      };
+      const path = (xs, ys) => xs.map((x, k) => (k ? 'L' : 'M') + x.toFixed(1) + ' ' + ys[k].toFixed(1)).join('');
+      const FR = [1, 10, 20, 30, 40, T];
+      // one panel: x = frame 1..T, y = linear; returns {x, y}
+      const panel = (svg, x0, y0, w, h, lo, hi, title, ylab, xlab) => {
+        const x = t => x0 + t / (T - 1) * w, y = v => y0 + (hi - v) / (hi - lo) * h;
+        text(svg, x0, y0 - 10, title, { class: 'panel-title' });
+        for (const v of ticks(lo, hi)) { el('line', { x1: x0, x2: x0 + w, y1: y(v), y2: y(v), class: Math.abs(v) < 1e-9 ? 'axis' : 'gridline' }, svg); text(svg, x0 - 6, y(v) + 4, String(v), { 'text-anchor': 'end' }); }
+        if (xlab) { for (const f of FR) text(svg, x(f - 1), y0 + h + 15, String(f), { 'text-anchor': 'middle' }); text(svg, x0 + w / 2, y0 + h + 31, xlab, { 'text-anchor': 'middle' }); }
+        if (ylab) { const yl = text(svg, 0, 0, ylab, { 'text-anchor': 'middle' }); yl.setAttribute('transform', `translate(${x0 - 38} ${y0 + h / 2}) rotate(-90)`); }
+        el('line', { x1: x0, x2: x0 + w, y1: y0 + h, y2: y0 + h, class: 'axis' }, svg);
+        return { x, y };
+      };
+      const xs = f => Array.from({ length: T }, (_, t) => f(t));
+
+      const drawPar = () => {
+        const host = document.getElementById('mx-par'); host.replaceChildren();
+        const q = D.order[pa], G0 = curve(GT, q, 'raw'), Gt = curve(GT, q, 'trend'), P0 = curve(model, q, 'raw'), Pt = curve(model, q, 'trend');
+        const rg = resid(GT, q), rp = resid(model, q), ppg = pp(rg), ppp = pp(rp);
+        const W = 660, H = 270, L = 54, TOP = 30, B = 46, gap = 64, BR = 92, w = (W - L - gap - BR) / 2, h = H - TOP - B;
+        const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Trajectory of one heart point for subject ${pa + 1}, ground truth and ${model}, before and after removing the cubic trend` }, host);
+        const all = [...G0, ...Gt, ...P0, ...Pt], pad = 0.06 * (Math.max(...all) - Math.min(...all));
+        const A = panel(svg, L, TOP, w, h, Math.min(...all) - pad, Math.max(...all) + pad, '1. Trajectory and cubic trend', `${AX} position (mm)`, 'Frame');
+        el('path', { d: path(xs(A.x), Gt.map(A.y)), class: 'mx-gt mx-trend' }, svg);
+        el('path', { d: path(xs(A.x), Pt.map(A.y)), class: 'mx-pred mx-trend' + ours() }, svg);
+        el('path', { d: path(xs(A.x), G0.map(A.y)), class: 'mx-gt' }, svg);
+        el('path', { d: path(xs(A.x), P0.map(A.y)), class: 'mx-pred' + ours() }, svg);
+        const m = 1.08 * Math.max(...rg.map(Math.abs), ...rp.map(Math.abs)), x2 = L + w + gap;
+        const Bp = panel(svg, x2, TOP, w, h, -m, m, '2. Residual: trajectory minus trend', 'Residual (mm)', 'Frame');
+        el('path', { d: path(xs(Bp.x), rg.map(Bp.y)), class: 'mx-gt' }, svg);
+        el('path', { d: path(xs(Bp.x), rp.map(Bp.y)), class: 'mx-pred' + ours() }, svg);
+        [[rg, ppg, 'gt', 'GT', 14], [rp, ppp, 'pred', 'Pred', 50]].forEach(([c, v, k, lab, dx]) => {
+          const bx = x2 + w + dx, y1 = Bp.y(Math.max(...c)), y2 = Bp.y(Math.min(...c)), o = k === 'pred' ? ours() : '';
+          el('path', { d: `M${bx - 4} ${y1}H${bx + 4}M${bx} ${y1}V${y2}M${bx - 4} ${y2}H${bx + 4}`, class: `mx-brk-${k}` + o }, svg);
+          text(svg, bx, y2 + 14, v.toFixed(2), { 'text-anchor': 'middle', class: `mx-t-${k}` + o });
+          text(svg, bx, y1 - 6, lab, { 'text-anchor': 'middle', class: `mx-t-${k}` + o });
+        });
+        text(svg, x2 + w + 32, TOP + h + 31, 'pp (mm)', { 'text-anchor': 'middle' });
+        const lg = [[L, 'mx-gt', 'Ground truth'], [L + 120, 'mx-pred' + ours(), model], [L + 250, 'mx-gt mx-trend', 'cubic trend (dashed)']];
+        for (const [lx, cls, lab] of lg) { el('line', { x1: lx, x2: lx + 18, y1: H - 6, y2: H - 6, class: cls }, svg); text(svg, lx + 24, H - 2, lab); }
+        const M = D.models[model];
+        document.getElementById('mx-par-num').innerHTML =
+          `Subject ${pa + 1}, this point: ${ppp.toFixed(2)} / ${ppg.toFixed(2)} = <b class="${ours().trim()}">${(ppp / ppg).toFixed(2)}</b><br>` +
+          `All ${D.n_subjects.toLocaleString('en-US')} subjects and points: PAR <b class="${ours().trim()}">${M.PAR.toFixed(3)}</b>`;
+      };
+
+      const drawApd = () => {
+        const host = document.getElementById('mx-apd'); host.replaceChildren();
+        const qa = D.order[pa], qb = D.order[pb];
+        const rows = [GT, model].map(s => ({ s, a: resid(s, qa).map(v => v / D.models[s].mean_rms_mm), b: resid(s, qb).map(v => v / D.models[s].mean_rms_mm), d: value('d', S[s].d[pa * n + pb]) }));
+        const m = 1.08 * Math.max(...rows.flatMap(r => [...r.a, ...r.b].map(Math.abs)));
+        const W = 380, L = 46, R = 8, TOP = 22, ph = 92, gap = 34, H = TOP + 2 * ph + gap + 40, w = W - L - R;
+        const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Residual curves of subjects ${pa + 1} and ${pb + 1} at one point, scaled by the mean RMS amplitude, for the ground truth and ${model}` }, host);
+        rows.forEach((r, k) => {
+          const isP = k === 1, o = isP ? ours() : '', y0 = TOP + k * (ph + gap);
+          const P = panel(svg, L, y0, w, ph, -m, m, `${r.s}: d = ${r.d.toFixed(2)}`, '', isP ? 'Frame' : '');
+          const X = xs(P.x);
+          el('path', { d: path(X, r.a.map(P.y)) + path([...X].reverse(), [...r.b].reverse().map(P.y)).replace('M', 'L') + 'Z', class: isP ? 'mx-fill-pred' + o : 'mx-fill-gt' }, svg);
+          el('path', { d: path(X, r.a.map(P.y)), class: (isP ? 'mx-pred' : 'mx-gt') + o }, svg);
+          el('path', { d: path(X, r.b.map(P.y)), class: (isP ? 'mx-pred' : 'mx-gt') + ' mx-b' + o }, svg);
+        });
+        const yl = text(svg, 0, 0, 'residual / mean RMS', { 'text-anchor': 'middle' }); yl.setAttribute('transform', `translate(10 ${TOP + ph + gap / 2}) rotate(-90)`);
+        document.getElementById('mx-d-pair').innerHTML = `<b>Subjects ${pa + 1} (solid) and ${pb + 1} (dashed)</b><br>one point, shaded gap = their difference`;
+      };
+
+      const drawFp = () => {
+        const host = document.getElementById('mx-fp'); host.replaceChildren();
+        const span = (html, cls) => { const e = document.createElement('span'); if (cls) e.className = cls; e.innerHTML = html; host.appendChild(e); };
+        span(''); span(`Subject ${pa + 1}`); span(`Subject ${pb + 1}`);
+        for (const s of [GT, model]) {
+          const o = s === 'Time2Track' ? 'ours' : '';
+          span(`<b class="${o}">${s === GT ? 'GT' : s}</b><br>RV ${value('rv', S[s].rv[pa * n + pb]).toFixed(2)}`, 'row');
+          for (const p of [pa, pb]) {
+            const cv = document.createElement('canvas'), q = D.order[p], g = S[s].gram;
+            cv.setAttribute('aria-label', `Timing fingerprint of subject ${p + 1}, ${s}`);
+            host.appendChild(cv);
+            paint(cv, T, k => lerpStops(COOLWARM, (g[q * NT + TRI[k]] / 127 + 1) / 2));
+          }
+        }
+        document.getElementById('mx-rv-pair').innerHTML = `<b>Timing fingerprints G = XX<sup>⊤</sup></b><br>frame × frame, red = moving alike`;
+      };
+
+      const drawNums = () => {
+        const g = D.models[GT], p = D.models[model], o = ours().trim();
+        document.getElementById('mx-apd-num').innerHTML = `APD: GT ${g.APD.toFixed(3)}, ${model} ${p.APD.toFixed(3)}<br>APDR <b class="${o}">${p.APDR.toFixed(3)}</b> &nbsp;|APDR − 1| = ${Math.abs(p.APDR - 1).toFixed(3)}`;
+        document.getElementById('mx-apc-num').innerHTML = `APC: GT ${g.APC.toFixed(3)}, ${model} ${p.APC.toFixed(3)}<br>APCR <b class="${o}">${p.APCR.toFixed(3)}</b> &nbsp;|APCR − 1| = ${Math.abs(p.APCR - 1).toFixed(3)}`;
+        for (const id of ['mx-d-name', 'mx-rv-name']) { const e = document.getElementById(id); e.textContent = model; e.className = o; }
+      };
+      const drawPair = () => {
+        marks.forEach(mk => { mk.style.left = `${(pb + 0.5) / n * 100}%`; mk.style.top = `${(pa + 0.5) / n * 100}%`; });
+        drawPar(); drawApd(); drawFp();
+      };
+      const seg = document.getElementById('mx-model'), btns = MODELS.map(m => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = m; b.setAttribute('aria-pressed', String(m === model));
+        b.addEventListener('click', () => { model = m; btns.forEach(x => x.setAttribute('aria-pressed', String(x === b))); drawMats(); drawNums(); drawPair(); });
+        seg.appendChild(b); return b;
+      });
+      drawMats(); drawNums(); drawPair();
+    }).catch(e => { const h = document.getElementById('mx-par'); if (h) h.textContent = 'Could not load metrics.json: ' + e.message; });
+  })();
+
+  /* ---------- 4D viewer (overlaid / side by side) on one clock, early-late gap chart, cohort volume curves ---------- */
+  (function viewer() {
+    const host = document.getElementById('viewer'), canvas = document.getElementById('mesh-canvas');
+    const msg = document.getElementById('viewer-msg'), cellsEl = document.getElementById('viewer-cells');
+    const grid4d = document.querySelector('.grid4d');
+    const colheads = document.getElementById('colheads'), rowheads = document.getElementById('rowheads');
+    const playBtn = document.getElementById('play'), slider = document.getElementById('frame');
+    const timeOut = document.getElementById('time'), speedSel = document.getElementById('speed');
+    const ROW_NAMES = ['Ground truth', 'Time2Track', 'PhysCtrl'];
+    const LINE_CLS = ['sline-gt', 'sline-ours', 'sline-cnn'];
+    const RAMP = ['#2f6bd8', '#2aa198', '#8a9a2b', '#d08a1e', '#c4512b'], ES_LO = 12, ES_HI = 26;
+    const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+    const rampColor = f => {
+      const t = Math.min(1, Math.max(0, (f - ES_LO) / (ES_HI - ES_LO))) * (RAMP.length - 1);
+      const i = Math.min(RAMP.length - 2, Math.floor(t)), a = hex(RAMP[i]), b = hex(RAMP[i + 1]), u = t - i;
+      return 'rgb(' + a.map((v, k) => Math.round(v + (b[k] - v) * u)).join(',') + ')';
+    };
+    const b64 = str => Uint8Array.from(atob(str), ch => ch.charCodeAt(0)).buffer;
+    const heads = [];                                     // playheads of the time charts: {x, line}
+    const moveHeads = f => { for (const h of heads) { const xx = h.x(f); h.line.setAttribute('x1', xx); h.line.setAttribute('x2', xx); } };
+
+    fetch('viewer.json').then(r => r.json()).then(start)
+      .catch(() => { msg.textContent = 'The 4D mesh data could not be loaded.'; });
+
+    function drawCohort(meta) {
+      const c = meta.cohort, F = meta.frames, MS = meta.ms_per_frame, M = meta.models.length;
+      document.getElementById('ramp-lo').textContent = ES_LO * MS + ' ms';
+      document.getElementById('ramp-hi').textContent = ES_HI * MS + ' ms';
+      const W = 1100, H = 300, PL = 46, gap = 24, T = 28, B = 36, lo = -70, hi = 20;
+      const pw = (W - PL - gap * (M - 1) - 6) / M;
+      const y = v => T + ((hi - v) / (hi - lo)) * (H - T - B);
+      const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Heart volume curves of ${c.n} validation subjects for each model, coloured by true end-systole time` }, document.getElementById('chart-cohort'));
+      const defs = el('defs', {}, svg), colors = c.gt_es.map(rampColor);
+      meta.models.forEach((name, m) => {
+        const x0 = PL + m * (pw + gap), x = f => x0 + (f / (F - 1)) * pw;
+        const cp = el('clipPath', { id: 'cohort-clip-' + m }, defs);
+        el('rect', { x: x0, y: T, width: pw, height: H - T - B }, cp);
+        text(svg, x0, 16, name, { class: 'panel-title' + (m === 1 ? ' ours' : '') });
+        for (let v = lo + 10; v <= hi; v += 20) {
+          el('line', { x1: x0, x2: x0 + pw, y1: y(v), y2: y(v), class: v === 0 ? 'axis' : 'gridline' }, svg);
+          if (m === 0) text(svg, PL - 6, y(v) + 4, v + '%', { 'text-anchor': 'end' });
+        }
+        for (const ms of [0, 500, 1000, 1500]) text(svg, x(ms / MS), H - B + 16, ms, { 'text-anchor': 'middle' });
+        if (m === 0) text(svg, x0, H - 4, 'time (ms)');
+        const g = el('g', { 'clip-path': `url(#cohort-clip-${m})` }, svg);
+        const vals = new Int16Array(b64(c.volume_pct[name]));
+        for (let i = 0; i < c.n; i++) {
+          let d = '';
+          for (let f = 0; f < F; f++) d += (f ? 'L' : 'M') + x(f).toFixed(1) + ' ' + y(vals[i * F + f] * c.scale).toFixed(1);
+          el('path', { d, class: 'curve', stroke: colors[i] }, g);
+        }
+        heads.push({ x, line: el('line', { x1: x(0), x2: x(0), y1: T, y2: H - B, class: 'playhead' }, svg) });
+      });
+    }
+
+    function drawGap(meta) {
+      const sp = meta.overlay.gap_mm, F = meta.frames, MS = meta.ms_per_frame;
+      const W = 720, H = 250, L = 46, R = 14, T = 34, B = 36, hi = Math.ceil(Math.max(...sp.flat()));
+      const x = f => L + (f / (F - 1)) * (W - L - R), y = v => T + (1 - v / hi) * (H - T - B);
+      const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Distance between the average motion of early and late subjects over the cardiac cycle for each model' }, document.getElementById('chart-spread'));
+      for (let v = 0; v <= hi; v++) {
+        el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v ? 'gridline' : 'axis' }, svg);
+        text(svg, L - 8, y(v) + 4, v + (v === hi ? ' mm' : ''), { 'text-anchor': 'end' });
+      }
+      for (let ms = 0; ms <= 1500; ms += 250) text(svg, x(ms / MS), H - B + 18, ms, { 'text-anchor': 'middle' });
+      text(svg, (L + W - R) / 2, H - 4, 'time (ms)', { 'text-anchor': 'middle' });
+      [2, 0, 1].forEach(m => el('path', { d: sp[m].map((v, f) => (f ? 'L' : 'M') + x(f).toFixed(1) + ' ' + y(v).toFixed(1)).join(''), class: LINE_CLS[m] }, svg));
+      meta.models.forEach((n, m) => {
+        const lx = L + m * 200;
+        el('line', { x1: lx, x2: lx + 26, y1: 14, y2: 14, class: LINE_CLS[m] }, svg);
+        text(svg, lx + 32, 18, ROW_NAMES[m], { class: 'lbl' + (m === 1 ? ' ours' : '') });
+      });
+      heads.push({ x, line: el('line', { x1: x(0), x2: x(0), y1: T - 6, y2: H - B, class: 'playhead' }, svg) });
+    }
+
+    function start(meta) {
+      window.T2T_FACES = meta.faces;
+      drawGap(meta);
+      drawCohort(meta);
+      const M = meta.models.length, N = meta.subjects.length, F = meta.frames, P = meta.points, S = meta.scale, MS = meta.ms_per_frame;
+      let frame = 0, mode = 'overlay', playing = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      let renderer = null;
+      if (!window.THREE || !THREE.OrbitControls) msg.textContent = 'The 3D viewer could not load its WebGL library.';
+      else {
+        try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); msg.hidden = true; }
+        catch (e) { msg.textContent = 'This browser cannot display WebGL.'; }
+      }
+      const data = new Int16Array(b64(meta.data));
+      const ESof = (n, m) => meta.subjects[n].es[meta.models[m]];
+      const subjColor = n => rampColor(ESof(n, 0));
+      const tmpl = meta.overlay.template, rots = meta.overlay.rotations;
+
+      // controls that work without WebGL too (they drive the chart playheads)
+      let chips = [], ovText = [], cols = 1, rows = 1;
+      function setPlaying(p) { playing = p; playBtn.textContent = p ? '❚❚' : '▶'; playBtn.setAttribute('aria-label', p ? 'Pause' : 'Play'); }
+
+      let camera, controls, ovScenes = [], ovMeshes = [], dirty = true;
+      if (renderer) {
+        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+        renderer.setScissorTest(true);
+        renderer.setClearColor(0x000000, 0);
+        camera = new THREE.PerspectiveCamera(28, 1, 1, 4000);
+        controls = new THREE.OrbitControls(camera, canvas);
+        controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false;
+        // the paper's anterior view (matplotlib elev 20, azim -90, z up), data (x, y, z) -> three.js (x, z, -y)
+        const R = 330, elev = 20 * Math.PI / 180;
+        camera.position.set(0, R * Math.sin(elev), R * Math.cos(elev));
+        controls.target.set(0, 0, 0); controls.update();
+        controls.addEventListener('change', () => { dirty = true; });
+        const newGeo = () => {
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(P * 3), 3));
+          g.setIndex(meta.faces);
+          return g;
+        };
+        const lit = scene => {
+          scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+          const light = new THREE.DirectionalLight(0xffffff, 0.8); scene.add(light); return light;
+        };
+        for (let m = 0; m < M; m++) {                                  // overlaid: all subjects as translucent hearts
+          const scene = new THREE.Scene(), light = lit(scene);
+          for (let n = 0; n < N; n++) {
+            const geo = newGeo();
+            scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
+              color: new THREE.Color(subjColor(n)), transparent: true, opacity: 0.22, depthWrite: false,
+              flatShading: true, shininess: 20, side: THREE.FrontSide })));
+            ovMeshes.push({ m, n, geo });
+          }
+          ovScenes.push({ scene, light });
+        }
+      }
+
+      function updateOverlay(f) {
+        for (const v of ovMeshes) {
+          const base = (v.n * M + v.m) * F * P * 3, off = base + f * P * 3, Rn = rots[v.n];
+          const pos = v.geo.attributes.position.array;
+          for (let i = 0; i < P; i++) {
+            const k = 3 * i;
+            const dx = (data[off + k] - data[base + k]) * S, dy = (data[off + k + 1] - data[base + k + 1]) * S, dz = (data[off + k + 2] - data[base + k + 2]) * S;
+            const x = tmpl[k] + Rn[0] * dx + Rn[1] * dy + Rn[2] * dz;
+            const y = tmpl[k + 1] + Rn[3] * dx + Rn[4] * dy + Rn[5] * dz;
+            const z = tmpl[k + 2] + Rn[6] * dx + Rn[7] * dy + Rn[8] * dz;
+            pos[k] = x; pos[k + 1] = z; pos[k + 2] = -y;
+          }
+          v.geo.attributes.position.needsUpdate = true;
+          v.geo.computeVertexNormals(); v.geo.computeBoundingSphere();
+        }
+      }
+
+      function setFrame(f) {
+        frame = f; slider.value = f; timeOut.value = (f * MS) + ' ms';
+        if (renderer) updateOverlay(f);
+        for (const ch of chips) ch.el.classList.toggle('lit', f > 0 && f >= ch.es);
+        for (const ch of chips) if (ch.dot) ch.el.style.background = (f > 0 && f >= ch.es) ? ch.color : 'transparent';
+        ovText.forEach((t, m) => { t.textContent = 'early–late gap ' + meta.overlay.gap_mm[m][f].toFixed(1) + ' mm'; });
+        moveHeads(f);
+        dirty = true;
+      }
+
+      function legendHeads(list) {
+        colheads.replaceChildren(...list.map(n => {
+          const d = document.createElement('div'), i = document.createElement('i'), t = document.createElement('span'), b = document.createElement('b');
+          i.style.background = subjColor(n); t.append(meta.subjects[n].group + ' · true ES ', b); b.textContent = ESof(n, 0) * MS + ' ms';
+          d.append(i, t); return d;
+        }));
+      }
+
+      function layout() {
+        const w = host.clientWidth;
+        chips = []; ovText = [];
+        const cells = [];
+        grid4d.classList.toggle('overlay', mode === 'overlay');
+        if (mode === 'overlay') {
+          cols = w >= 600 ? M : 2; rows = M / cols;
+          legendHeads([...Array(N).keys()]);
+          for (let m = 0; m < M; m++) {
+            const d = document.createElement('div'), b = document.createElement('b'), foot = document.createElement('div'), em = document.createElement('em');
+            d.className = 'ov'; b.textContent = ROW_NAMES[m]; if (m === 1) b.className = 'ours';
+            foot.className = 'ov-foot';
+            for (let n = 0; n < N; n++) {
+              const dot = document.createElement('i'), c = subjColor(n);
+              dot.style.borderColor = c; dot.title = 'end-systole ' + ESof(n, m) * MS + ' ms';
+              foot.appendChild(dot); chips.push({ el: dot, es: ESof(n, m), dot: true, color: c });
+            }
+            foot.appendChild(em); ovText.push(em);
+            d.append(b, foot); cells.push(d);
+          }
+        }
+        const cw = w / cols, ch = Math.round(Math.min(cw * (mode === 'overlay' ? 1.0 : 0.95), mode === 'overlay' ? 330 : 205));
+        host.style.height = (ch * rows) + 'px';
+        if (mode === 'overlay') colheads.style.gridTemplateColumns = '';
+        else colheads.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        cellsEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        cellsEl.style.gridTemplateRows = rowheads.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+        cellsEl.replaceChildren(...cells);
+        if (renderer) { renderer.setSize(w, ch * rows, false); camera.aspect = cw / ch; camera.updateProjectionMatrix(); }
+        setFrame(frame);
+      }
+
+      function render() {
+        const w = host.clientWidth, h = host.clientHeight, cw = w / cols, ch = h / rows;
+        const draw = (scene, light, c, r) => {
+          const x = c * cw, y = h - (r + 1) * ch;
+          renderer.setViewport(x, y, cw, ch); renderer.setScissor(x, y, cw, ch);
+          light.position.copy(camera.position);
+          renderer.render(scene, camera);
+        };
+        ovScenes.forEach((v, m) => draw(v.scene, v.light, m % cols, Math.floor(m / cols)));
+      }
+
+      playBtn.addEventListener('click', () => setPlaying(!playing));
+      slider.addEventListener('input', () => { setPlaying(false); setFrame(+slider.value); });
+      let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 100); });
+      setPlaying(playing);
+      const gtES = g => meta.subjects.filter(x => x.group === g).map(x => x.es['Ground truth']);
+      frame = playing ? 0 : Math.round((Math.max(...gtES('early')) + Math.min(...gtES('late'))) / 2);   // between the two groups' true ES
+      layout();
+      let last = performance.now(), acc = 0;
+      (function loop(now) {
+        const dt = Math.min(200, now - last); last = now;
+        if (playing) {
+          acc += dt * parseFloat(speedSel.value);
+          if (acc >= MS) { const k = Math.floor(acc / MS); acc -= k * MS; setFrame((frame + k) % F); }
+        }
+        if (renderer) { controls.update(); if (dirty) { render(); dirty = false; } }
+        requestAnimationFrame(loop);
+      })(last);
+    }
+  })();
+
+  document.querySelectorAll('details.fold').forEach(d => d.addEventListener('toggle', () => { if (d.open) window.dispatchEvent(new Event('resize')); }));
+
+  /* ---------- 4D results, hand block: lockstep and staggered hands overlaid, truth vs baseline decoders ---------- */
+  (function hand4d() {
+    const host = document.getElementById('h-viewer'), canvas = document.getElementById('h-canvas');
+    const msg = document.getElementById('h-msg'), cellsEl = document.getElementById('h-cells'), grid4d = document.getElementById('h-grid4d');
+    const colheads = document.getElementById('h-colheads'), rowheads = document.getElementById('h-rowheads');
+    const playBtn = document.getElementById('h-play'), slider = document.getElementById('h-frame');
+    const timeOut = document.getElementById('h-time'), speedSel = document.getElementById('h-speed');
+    let ROW_NAMES = [];
+    const LINE_OF = { 'Ground truth': 'sline-gt', 'EMGFormer': 'sline-cnn', 'EMGFormer w/ Time2Track': 'sline-ours' };   // Time2Track's red, as in the heart charts
+    const GROUP_COL = { lockstep: '#2f6bd8', staggered: '#c4512b' };
+    const RAMP = ['#2f6bd8', '#2aa198', '#8a9a2b', '#d08a1e', '#c4512b'], SP_LO = 40, SP_HI = 300;
+    const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+    const rampColor = v => {
+      const t = Math.min(1, Math.max(0, (v - SP_LO) / (SP_HI - SP_LO))) * (RAMP.length - 1);
+      const i = Math.min(RAMP.length - 2, Math.floor(t)), a = hex(RAMP[i]), b = hex(RAMP[i + 1]), u = t - i;
+      return 'rgb(' + a.map((x, k) => Math.round(x + (b[k] - x) * u)).join(',') + ')';
+    };
+    const b64 = str => new Int16Array(Uint8Array.from(atob(str), ch => ch.charCodeAt(0)).buffer);
+    let heads = [], gapHead = null;
+    const moveHeads = f => { for (const h of (gapHead ? [...heads, gapHead] : heads)) { const xx = h.x(f); h.line.setAttribute('x1', xx); h.line.setAttribute('x2', xx); } };
+    const pretty = st => st.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+
+    Promise.all([fetch('hand4d.json').then(r => r.json()), fetch('handmodel.json').then(r => r.json())]).then(([D, HM]) => {
+      const SRC = D.sources, M = SRC.length, N = D.gestures[0].hands.length, F = D.frames, MS = 1000 / D.fs, T0 = -D.lead_in_ms, NV = HM.n_vertices;
+      let HANDS = D.gestures[0].hands, GESTURE = '', gap = [], gapMax = 1;              // the selected gesture's ten hands, lockstep first
+      ROW_NAMES = SRC; const LINE_CLS = SRC.map(k => LINE_OF[k] || 'sline-alt');
+      const tms = f => T0 + f * MS;
+      D.gestures.forEach(g => g.hands.forEach(h => { h.A = {}; for (const k of SRC) h.A[k] = b64(h.angles[k]); }));
+      const skinR = makeSkinner(HM.right), buf = new Float64Array(NV * 3), ang = new Float64Array(20);
+      const R = HM.right, cen = [0, 1, 2].map(k => { let m = 0; for (let v = 0; v < NV; v++) m += R.verts[3 * v + k]; return m / NV; });
+      const start = new Float64Array(20);                     // shared start pose: mean true first frame of the ten hands (per gesture)
+      // vertices of hand h, source k, frame f (shared start + own change). Every hand is skinned on the RIGHT-hand model:
+      // the joint angles are anatomical, so a left-hand session becomes its mirror image and all hands share one frame
+      // (skinning left sessions on the left model put them 83 mm away from right hands at the same pose, so they never overlapped)
+      const poseInto = (h, k, f, side, out) => {
+        for (let j = 0; j < 20; j++) ang[j] = start[j] + (h.A[k][f * 20 + j] - h.A[k][j]) * D.angle_scale;
+        skinR(ang, buf);
+        for (let i = 0; i < NV; i++) { const q = 3 * i; out[q] = buf[q] - cen[0]; out[q + 1] = buf[q + 2] - cen[2]; out[q + 2] = -(buf[q + 1] - cen[1]); }
+      };
+      const started = (h, k, f) => { const on = h.onsets[k], valid = on.filter(v => v !== null); return [valid.filter(v => v <= tms(f)).length, valid.length]; };
+
+      /* lockstep-staggered gap: difference between the two groups in the mean fraction of joints that have started */
+      const frac = (h, k, f) => { const [kk, n] = started(h, k, f); return n ? kk / n : 0; };
+      const meanGap = g => { const v = g.filter((_, f) => tms(f) >= -200 && tms(f) <= 500); return v.reduce((x, y) => x + y, 0) / v.length; };   // over the analysed cycle
+      function drawGap() {
+        const hostG = document.getElementById('h-gap'); hostG.replaceChildren();
+        const W = 720, H = 260, L = 46, R2 = 14, T = 44, B = 36, hi = Math.ceil(Math.max(...gap.flat()) * 10) / 10 || 0.1;
+        const x = f => L + (f / (F - 1)) * (W - L - R2), y = v => T + (1 - v / hi) * (H - T - B);
+        const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Difference between lockstep and staggered hands in the fraction of joints started, ${GESTURE}, for the ground truth and the two decoders` }, hostG);
+        for (let v = 0; v <= hi + 1e-9; v += 0.1) { el('line', { x1: L, x2: W - R2, y1: y(v), y2: y(v), class: v ? 'gridline' : 'axis' }, svg); text(svg, L - 8, y(v) + 4, +v.toFixed(1), { 'text-anchor': 'end' }); }
+        text(svg, 0, 0, 'gap in fraction started', { 'text-anchor': 'middle', transform: `translate(10,${((T + H - B) / 2).toFixed(1)}) rotate(-90)` });
+        for (let t = Math.ceil(T0 / 500) * 500; t <= T0 + (F - 1) * MS; t += 500) text(svg, x((t - T0) / MS), H - B + 18, t, { 'text-anchor': 'middle' });
+        text(svg, (L + W - R2) / 2, H - 4, 'time from cycle start (ms)', { 'text-anchor': 'middle' });
+        [2, 1, 0].forEach(m => el('path', { d: gap[m].map((v, f) => (f ? 'L' : 'M') + x(f).toFixed(1) + ' ' + y(v).toFixed(1)).join(''), class: LINE_CLS[m] }, svg));
+        ROW_NAMES.forEach((n, m) => { const lx = L + (m % 3) * 220, ly = 10 + Math.floor(m / 3) * 14; el('line', { x1: lx, x2: lx + 22, y1: ly, y2: ly, class: LINE_CLS[m] }, svg); text(svg, lx + 28, ly + 4, n, { class: 'lbl' + (LINE_CLS[m] === 'sline-ours' ? ' ours' : ''), style: 'font-size:10px' }); });
+        gapHead = { x, line: el('line', { x1: x(0), x2: x(0), y1: T - 6, y2: H - B, class: 'playhead' }, svg) };
+      }
+
+      /* cohort: fraction of joints started over time, every lockstep and staggered cycle, coloured by true onset spread */
+      (function drawCohort() {
+        const c = D.cohort, ON = {}; for (const k of SRC) ON[k] = b64(c.onsets[k]);
+        document.getElementById('h-n').textContent = c.n; document.getElementById('h-ramp-lo').textContent = SP_LO + ' ms'; document.getElementById('h-ramp-hi').textContent = SP_HI + ' ms';
+        const W = 1100, H = 300, PL = 46, gp = 24, T = 28, B = 36, pw = (W - PL - gp * (M - 1) - 6) / M;
+        const y = v => T + (1 - v) * (H - T - B), colors = c.true_spread_ms.map(rampColor);
+        const order = [...Array(c.n).keys()].sort((p, q) => c.true_spread_ms[p] - c.true_spread_ms[q]);
+        const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Fraction of joints started over time for ${c.n} test cycles, ground truth and the two decoders, coloured by true joint onset spread` }, document.getElementById('h-cohort'));
+        SRC.forEach((k, m) => {
+          const x0 = PL + m * (pw + gp), x = t => x0 + ((t - T0) / (F - 1) / MS) * pw;
+          text(svg, x0, 16, ROW_NAMES[m], { class: 'panel-title' });
+          for (const v of [0, 0.5, 1]) { el('line', { x1: x0, x2: x0 + pw, y1: y(v), y2: y(v), class: v ? 'gridline' : 'axis' }, svg); if (m === 0) text(svg, PL - 6, y(v) + 4, v, { 'text-anchor': 'end' }); }
+          for (let t = Math.ceil(T0 / 500) * 500; t <= T0 + (F - 1) * MS; t += 500) text(svg, x(t), H - B + 16, t, { 'text-anchor': 'middle' });
+          if (m === 0) { text(svg, x0, H - 4, 'time from cycle start (ms)'); text(svg, 0, 0, 'fraction of joints started', { 'text-anchor': 'middle', transform: `translate(10,${((T + H - B) / 2).toFixed(1)}) rotate(-90)` }); }
+          for (const i of order) {
+            const on = Array.from(ON[k].subarray(i * 20, i * 20 + 20)).filter(v => v !== -32768).sort((p, q) => p - q);
+            if (!on.length) continue;
+            let d = `M${x(T0).toFixed(1)} ${y(0).toFixed(1)}`;
+            on.forEach((t, j) => { const tt = Math.max(T0, t); d += `L${x(tt).toFixed(1)} ${y(j / on.length).toFixed(1)}L${x(tt).toFixed(1)} ${y((j + 1) / on.length).toFixed(1)}`; });
+            d += `L${x(T0 + (F - 1) * MS).toFixed(1)} ${y(1).toFixed(1)}`;
+            el('path', { d, class: 'curve', stroke: colors[i] }, svg);
+          }
+          heads.push({ x: f => x(tms(f)), line: el('line', { x1: x(T0), x2: x(T0), y1: T, y2: H - B, class: 'playhead' }, svg) });
+        });
+      })();
+      const setNote = g => { document.getElementById('h-note').textContent = `Hands are the five per group of ${GESTURE} (of ${g.n.lockstep} lockstep and ${g.n.staggered} staggered test cycles) whose true joint onset spread is closest to the group median, chosen on the ground truth only and shown without identifiers. Both models are shown at their first seed (2 kHz predictions), and EMGFormer w/ Time2Track is EMGFormer with Time2Track's delay-token conditioning (cross-attention over per-channel delay tokens), the delays taken from sEMG activation onsets, the branch trained at a tenfold learning rate with a loss on the joints' timing spread, the strongest delay variant we trained. Over all within-gesture cycles, EMGFormer keeps 21 to 24 % of the true gap in joint onset spread and this delay variant 23 % (three seeds each).`; };
+
+      /* viewer */
+      let frame = 0, mode = 'overlay', playing = !window.matchMedia('(prefers-reduced-motion: reduce)').matches, renderer = null;
+      if (!window.THREE || !THREE.OrbitControls) msg.textContent = 'The 3D viewer could not load its WebGL library.';
+      else { try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); msg.hidden = true; } catch (e) { msg.textContent = 'This browser cannot display WebGL.'; } }
+      let chips = [], ovText = [], cols = 1, rows = 1, camera, controls, ovScenes = [], ovMeshes = [], dirty = true;
+      const setPlaying = p => { playing = p; playBtn.textContent = p ? '❚❚' : '▶'; playBtn.setAttribute('aria-label', p ? 'Pause' : 'Play'); };
+      if (renderer) {
+        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.setScissorTest(true); renderer.setClearColor(0x000000, 0);
+        camera = new THREE.PerspectiveCamera(28, 1, 1, 4000);
+        const Rc = 420, elev = 20 * Math.PI / 180; camera.position.set(0, Rc * Math.sin(elev), Rc * Math.cos(elev));
+        controls = new THREE.OrbitControls(camera, canvas); controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false;
+        controls.addEventListener('change', () => { dirty = true; });
+        const newGeo = () => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NV * 3), 3)); g.setIndex(HM.faces); return g; };
+        const lit = sc => { sc.add(new THREE.AmbientLight(0xffffff, 0.45)); const l = new THREE.DirectionalLight(0xffffff, 0.8); sc.add(l); return l; };
+        for (let m = 0; m < M; m++) for (const g of ['lockstep', 'staggered']) {    // by group: one view per model and group
+          const scene = new THREE.Scene(), light = lit(scene);
+          for (let n = 0; n < N; n++) {
+            if (HANDS[n].group !== g) continue;
+            const geo = newGeo();
+            scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: new THREE.Color(GROUP_COL[g]), transparent: true, opacity: 0.32, depthWrite: false, flatShading: true, shininess: 20, side: THREE.DoubleSide })));
+            ovMeshes.push({ m, n, geo });
+          }
+          ovScenes.push({ scene, light, m, g });
+        }
+      }
+      const tmp = new Float64Array(NV * 3);
+      function setFrame(f) {
+        frame = f; slider.value = f; timeOut.value = Math.round(tms(f)) + ' ms';
+        if (renderer) for (const v of ovMeshes) {
+          const h = HANDS[v.n]; poseInto(h, SRC[v.m], f, h.side, tmp); v.geo.attributes.position.array.set(tmp);
+          v.geo.attributes.position.needsUpdate = true; v.geo.computeVertexNormals(); v.geo.computeBoundingSphere();
+        }
+        for (const ch of chips) {
+          const [k, n] = started(HANDS[ch.n], SRC[ch.m], f), frac = n ? k / n : 0;
+          if (ch.dot) ch.el.style.background = `conic-gradient(${ch.color} ${(frac * 360).toFixed(0)}deg, transparent 0)`;
+          else { ch.el.textContent = `${k}/${n} joints started`; ch.el.classList.toggle('lit', n > 0 && k === n); }
+        }
+        ovText.forEach(t => { t.bar.style.width = (100 * gap[t.m][f] / gapMax).toFixed(1) + '%'; t.ref.style.left = (100 * gap[0][f] / gapMax).toFixed(1) + '%'; t.wrap.title = `lockstep–staggered gap ${gap[t.m][f].toFixed(2)} (ground truth ${gap[0][f].toFixed(2)})`; });
+        moveHeads(f); dirty = true;
+      }
+      function legendHeads(list) {
+        const tag = document.createElement('div'), tb = document.createElement('b');
+        tb.textContent = GESTURE; tag.append('gesture: ', tb);                         // every shown hand performs this gesture
+        colheads.replaceChildren(tag, ...list.map(n => {
+          const h = HANDS[n], d = document.createElement('div'), i = document.createElement('i'), t = document.createElement('span'), b = document.createElement('b');
+          i.style.background = GROUP_COL[h.group]; t.append(h.group + ' · true onset spread ', b); b.textContent = Math.round(h.true_spread_ms) + ' ms';
+          d.append(i, t); return d;
+        }));
+      }
+      function layout() {
+        const w = host.clientWidth, cells = []; chips = []; ovText = [];
+        grid4d.classList.toggle('overlay', mode === 'overlay');
+        document.getElementById('h-mode-note').textContent = 'Per model, the five lockstep hands (blue) and the five staggered hands (orange) are overlaid within their group, every hand moving from one shared start pose by its own change in joint angles (left-hand sessions mirrored onto the right hand). Each dot fills with the fraction of that hand\'s joints that have started to move, the bar shows the lockstep–staggered gap at this moment with the ground truth\'s gap as a yellow tick, and dragging rotates all views.';
+        if (mode === 'overlay') {
+          cols = w >= 900 ? 2 * M : 2; rows = 2 * M / cols;        // one row on wide screens: lockstep | staggered per model
+          legendHeads([...Array(N).keys()]);
+          for (const v of ovScenes) {
+            const d = document.createElement('div'), head = document.createElement('div'), b = document.createElement('b'), gr = document.createElement('span'), foot = document.createElement('div');
+            d.className = 'ov'; b.textContent = ROW_NAMES[v.m]; gr.className = 'grp'; gr.textContent = ` ${v.g} · ${GESTURE}`; head.append(b, gr); foot.className = 'ov-foot';
+            for (let n = 0; n < N; n++) { if (HANDS[n].group !== v.g) continue; const dot = document.createElement('i'), c = GROUP_COL[v.g]; dot.style.borderColor = c; dot.title = `${v.g}, joints started`; foot.appendChild(dot); chips.push({ el: dot, n, m: v.m, dot: true, color: c }); }
+            if (v.g === 'staggered') {                                 // the gap as a bar, the yellow tick marks the ground truth's gap at this moment
+              const t = document.createElement('span'), wrap = document.createElement('span'), bar = document.createElement('i'), ref = document.createElement('s');
+              t.className = 'gap-t'; t.textContent = 'gap'; wrap.className = 'gapbar'; wrap.append(bar, ref); foot.append(t, wrap); ovText.push({ m: v.m, bar, ref, wrap });
+            }
+            d.append(head, foot); cells.push(d);
+          }
+        }
+        const cw = w / cols, ch = Math.round(Math.min(cw * (rows === 1 ? 1.25 : 0.6), 260));
+        host.style.height = (ch * rows) + 'px';
+        colheads.style.gridTemplateColumns = '';
+        cellsEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        cellsEl.style.gridTemplateRows = rowheads.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+        cellsEl.replaceChildren(...cells);
+        if (renderer) { renderer.setSize(w, ch * rows, false); camera.aspect = cw / ch; camera.updateProjectionMatrix(); }
+        setFrame(frame);
+      }
+      function render() {
+        const w = host.clientWidth, h = host.clientHeight, cw = w / cols, ch = h / rows;
+        const draw = (scene, light, c, r) => { const x = c * cw, y = h - (r + 1) * ch; renderer.setViewport(x, y, cw, ch); renderer.setScissor(x, y, cw, ch); light.position.copy(camera.position); renderer.render(scene, camera); };
+        ovScenes.forEach((v, m) => draw(v.scene, v.light, m % cols, Math.floor(m / cols)));
+      }
+      playBtn.addEventListener('click', () => setPlaying(!playing));
+      slider.max = F - 1;
+      slider.addEventListener('input', () => { setPlaying(false); setFrame(+slider.value); });
+      let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 100); });
+      setPlaying(playing);
+      frame = playing ? 0 : Math.round((100 - T0) / MS);            // paused: 100 ms after the cycle start
+      function useGesture(k) {
+        const g = D.gestures[k]; HANDS = g.hands; GESTURE = pretty(g.name);
+        console.assert(HANDS.every((h, n) => h.group === D.gestures[0].hands[n].group), 'hand order differs between gestures');
+        start.fill(0); for (const h of HANDS) for (let j = 0; j < 20; j++) start[j] += h.A[SRC[0]][j] * D.angle_scale / N;
+        gap = SRC.map(src => [...Array(F).keys()].map(f => {
+          const m = grp => { const hs = HANDS.filter(h => h.group === grp); return hs.reduce((acc, h) => acc + frac(h, src, f), 0) / hs.length; };
+          return Math.abs(m('lockstep') - m('staggered'));
+        }));
+        gapMax = Math.max(...gap.flat(), 1e-6);
+        document.getElementById('h-gesture').textContent = GESTURE;
+        document.getElementById('h-gap-list').textContent = `${SRC.map((src, m) => `${meanGap(gap[m]).toFixed(2)} for ${src === 'Ground truth' ? 'the ground truth' : src}`).join(', ')} (${GESTURE})`;
+        drawGap(); setNote(g); layout();
+      }
+      const gsel = document.getElementById('h-gesture-sel');
+      D.gestures.forEach((g, k) => gsel.appendChild(Object.assign(document.createElement('option'), { value: k, textContent: `${pretty(g.name)} (${g.n.lockstep} + ${g.n.staggered} cycles)` })));
+      gsel.addEventListener('change', () => useGesture(+gsel.value));
+      useGesture(0);
+      let last = performance.now(), acc = 0;
+      (function loop(now) {
+        const dt = Math.min(200, now - last); last = now;
+        if (playing) { acc += dt * parseFloat(speedSel.value); if (acc >= MS) { const k = Math.floor(acc / MS); acc -= k * MS; setFrame((frame + k) % F); } }
+        if (renderer) { controls.update(); if (dirty) { render(); dirty = false; } }
+        requestAnimationFrame(loop);
+      })(last);
+    }).catch(e => { msg.textContent = 'The 4D hand data could not be loaded.'; console.error(e); });
+  })();
+
+  /* ---------- hand panel: sEMG onset lag in lockstep vs staggered gesture cycles (E37), explorer like Fig. 1b ---------- */
+  (function handPanel() {
+    const heatHost = document.getElementById('d1-heat'), LOCK = '#2f6bd8', STAG = '#c4512b', NCOL = 5;
+
+    /* the 16 channels around the forearm, numbered as recorded */
+    const band = document.getElementById('d1-band'), CX = 120, CY = 118, RE = 76;
+    el('ellipse', { class: 'body', cx: CX, cy: CY, rx: 102, ry: 96 }, band);
+    el('circle', { cx: CX, cy: CY, r: RE, fill: 'none', class: 'axis' }, band);
+    const chan = [...Array(16)].map((_, k) => {
+      const th = -Math.PI / 2 + 2 * Math.PI * k / 16, c = Math.cos(th), sn = Math.sin(th);
+      return [el('circle', { cx: CX + RE * c, cy: CY + RE * sn, r: 6, class: 'elec' }, band),
+              text(band, CX + (RE + 15) * c, CY + (RE + 15) * sn + 3, k + 1, { 'text-anchor': 'middle' })];
+    });
+    text(band, CX, CY + 3, 'forearm', { 'text-anchor': 'middle', class: 'tag' });
+    text(band, CX, 244, 'sEMG band, cross-section', { 'text-anchor': 'middle', class: 'tag' });
+    const mark = ks => chan.forEach((q, k) => q.forEach(e => e.classList.toggle('on', ks.includes(k))));
+
+    Promise.all([fetch('semg.json').then(r => r.json()), fetch('handmodel.json').then(r => r.json())]).then(([D, HM]) => {
+      const b64 = str => new Int16Array(Uint8Array.from(atob(str), ch => ch.charCodeAt(0)).buffer), G = D.groups;
+      D.pairs.forEach(pr => { for (const g of ['lockstep', 'staggered']) Object.assign(pr[g], { E: b64(pr[g].env), A: b64(pr[g].angles) }); });
+      const gname = st => st.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+      document.getElementById('d1-n').textContent = `${G.n[1].toLocaleString('en')} and ${G.n[0].toLocaleString('en')}`;
+      document.getElementById('d1-ns').textContent = G.n_stages;
+      document.getElementById('d1-more').textContent = G.pairs_p05_larger_in_staggered;
+
+      /* joint timing spread across lockstep and staggered cycles, drawn like the end-systole timing spread chart of the heart */
+      (function summary() {
+        const Y = D.sync_summary, host = document.getElementById('d1-sum');
+        const NAME = { 'EMGFormer w/ Time2Track': ['EMGFormer w/ Time2Track', 'bar-ours', true], 'EMGFormer': ['EMGFormer', 'bar-base', false] };
+        const row = k => Y.rows.find(r => r.name === k);
+        const data = [{ n: 'Ground truth', v: Y.truth[0], cls: 'bar-gt' }, ...['EMGFormer w/ Time2Track', 'EMGFormer'].map(k => ({ n: NAME[k][0], v: row(k).value[0], lo: row(k).value[1], hi: row(k).value[2], cls: NAME[k][1], ours: NAME[k][2] }))];
+        const set = (id, v) => { document.getElementById(id).textContent = v; };
+        const T = row('EMGFormer w/ Time2Track'), E = row('EMGFormer'), Sh = row('shuffled tokens (spread)');
+        set('d1-s-gt', Math.round(Y.truth[0])); set('d1-s-e', Math.round(E.value[0])); set('d1-s-t', Math.round(T.value[0])); set('d1-s-sh', Math.round(Sh.value[0]));
+        set('d1-s-rt', T.ratio.toFixed(2)); set('d1-s-re', E.ratio.toFixed(2));
+        set('d1-s-n', Y.n_cycles.toLocaleString('en')); set('d1-s-seed', Y.seed);
+        set('d1-s-ranges', [['EMGFormer w/ Time2Track', T], ['shuffled', Sh], ['EMGFormer', E]].map(([n, r]) => `${n} ${r.ratio_range[0].toFixed(2)} to ${r.ratio_range[1].toFixed(2)}`).join(', '));
+        const XM = 200, W = 720, L = 196, R = 70, T0 = 10, rowH = 34, H = T0 + data.length * rowH + 52, YB = H - 46;
+        const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'SD of the joint onset spread across lockstep and staggered cycles: ' + data.map(d => `${d.n} ${d.v.toFixed(1)} ms`).join(', ') }, host);
+        const x = v => L + (v / XM) * (W - L - R);
+        for (let v = 0; v <= XM; v += 50) { el('line', { x1: x(v), x2: x(v), y1: T0, y2: YB, class: v ? 'gridline' : 'axis' }, svg); text(svg, x(v), YB + 16, v, { 'text-anchor': 'middle' }); }
+        el('line', { x1: x(0), x2: x(XM), y1: YB, y2: YB, class: 'axis' }, svg);
+        text(svg, x(XM / 2), H - 6, `SD of joint onset spread across ${Y.n_cycles.toLocaleString('en')} lockstep and staggered test cycles (ms)`, { 'text-anchor': 'middle', class: 'lbl' });
+        text(svg, 0, 0, 'model', { 'text-anchor': 'middle', class: 'lbl', transform: `translate(14,${((T0 + YB) / 2).toFixed(1)}) rotate(-90)` });
+        el('line', { x1: x(data[0].v), x2: x(data[0].v), y1: T0, y2: YB, class: 'ideal' }, svg);
+        data.forEach((d, i) => {
+          const y = T0 + i * rowH + 8;
+          text(svg, L - 10, y + 13, d.n, { 'text-anchor': 'end', class: 'lbl' + (d.ours ? ' ours' : '') });
+          el('rect', { x: x(0), y, width: x(d.v) - x(0), height: 18, class: d.cls }, svg);
+          if (d.lo !== undefined) {
+            el('line', { x1: x(d.lo), x2: x(d.hi), y1: y + 9, y2: y + 9, class: 'whisk' }, svg);
+            el('line', { x1: x(d.lo), x2: x(d.lo), y1: y + 4, y2: y + 14, class: 'whisk' }, svg);
+            el('line', { x1: x(d.hi), x2: x(d.hi), y1: y + 4, y2: y + 14, class: 'whisk' }, svg);
+          }
+          text(svg, x(Math.max(d.v, d.hi || 0)) + 8, y + 13, d.v.toFixed(1), { class: 'lbl' + (d.ours ? ' ours' : '') });
+        });
+      })();
+
+      /* heatmap: lower = Cohen's d of |onset lag| staggered vs lockstep, upper = p */
+      const n = 16, C = 26, L = 46, T = 6, B = 46, W = L + n * C + 6, H = T + n * C + B, cells = {};
+      let dmax = 0; D.d.forEach(r => r.forEach(v => { if (v !== null) dmax = Math.max(dmax, Math.abs(v)); }));
+      dmax = Math.ceil(dmax * 20) / 20;
+      document.getElementById('d1-dlo').textContent = (-dmax).toFixed(2); document.getElementById('d1-dhi').textContent = '+' + dmax.toFixed(2);
+      const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Matrix of sEMG onset-lag differences between staggered and lockstep cycles, ${G.pairs_p05} of 120 channel pairs significant` }, heatHost);
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+        if (r === c) continue;
+        const i = Math.min(r, c), jj = Math.max(r, c), up = c > r, dv = D.d[i][jj], pv = D.p[i][jj];
+        if (dv === null || pv === null) continue;
+        const rgb = up ? lerpStops(YLGNBU, pv) : lerpStops(COOLWARM, (dv / dmax + 1) / 2), lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+        const x = L + c * C, y = T + r * C;
+        const rect = el('rect', { x, y, width: C - 1, height: C - 1, fill: `rgb(${rgb})`, class: 'cell', tabindex: 0, 'aria-label': `channels ${i + 1} and ${jj + 1}` }, svg);
+        el('title', {}, rect).textContent = `channels ${i + 1} and ${jj + 1}: |onset lag| staggered vs lockstep cycles, Cohen's d ${dv.toFixed(3)}, ${pTip(pv)}`;
+        text(svg, x + (C - 1) / 2, y + C / 2 + 3, up ? pText(pv) : dv.toFixed(2), { 'text-anchor': 'middle', class: 'cell-t', style: 'font-size:8px;fill:' + (lum > 0.55 ? '#1d2230' : '#ffffff') });
+        const go = () => select(i, jj);
+        rect.addEventListener('mouseenter', go); rect.addEventListener('focus', go); rect.addEventListener('click', go);
+        cells[r + ',' + c] = rect;
+      }
+      for (let k = 0; k < n; k++) {
+        text(svg, L - 5, T + k * C + C / 2 + 3, k + 1, { 'text-anchor': 'end', class: 'lbl' });
+        text(svg, L + k * C + C / 2, T + n * C + 13, k + 1, { 'text-anchor': 'middle', class: 'lbl' });
+      }
+      text(svg, L + n * C / 2, H - 6, 'sEMG channel', { 'text-anchor': 'middle', class: 'lbl' });
+      text(svg, 0, 0, 'sEMG channel', { 'text-anchor': 'middle', class: 'lbl', transform: `translate(12,${(T + n * C / 2).toFixed(1)}) rotate(-90)` });
+
+      /* five lockstep and five staggered cycles: envelopes of the two channels with their onsets, and the true hands */
+      const grid = document.getElementById('d1-grid');
+      const EW = 200, EH = 140, EL = 30, ER = 4, ET = 4, EB = 28, TOP = ET + 18, YB = EH - EB;
+      const drawN = arr => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const k = Math.floor(Math.random() * (i + 1)); [a[i], a[k]] = [a[k], a[i]]; } return a.slice(0, NCOL); };
+      let cols = drawN(D.pairs), cur = null, heads = [], uid = 0;
+      function cell(g, c, a, b) {
+        const NF = c.env_frames, t0 = -c.ctx_pre_ms, t1 = c.ctx_post_ms, ex = t => EL + (t - t0) / (t1 - t0) * (EW - EL - ER);
+        const lo = -0.1, hi = 1.05, y = v => TOP + (hi - v) / (hi - lo) * (YB - TOP), cls = g === 'lockstep' ? 'early' : 'late';
+        const svgE = el('svg', { viewBox: `0 0 ${EW} ${EH}`, role: 'img', 'aria-label': `${g} cycle, sEMG channels ${a + 1} and ${b + 1}` });
+        const id = 'semg' + (uid++), mk = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 5, markerHeight: 5, orient: 'auto-start-reverse' }, el('defs', {}, svgE));
+        el('path', { d: 'M0 0 L10 5 L0 10 Z', fill: g === 'lockstep' ? LOCK : STAG }, mk);
+        el('rect', { x: ex(-c.pre_ms), y: TOP - 2, width: ex(c.duration_ms) - ex(-c.pre_ms), height: YB - TOP + 2, class: 'cyc-band' }, svgE);   // the analysed cycle
+        text(svgE, ex(-c.pre_ms) + 2, YB - 3, 'analysed cycle', { class: 'cyc-t' });
+        el('line', { x1: EL, x2: EW - ER, y1: YB, y2: YB, class: 'ax' }, svgE);
+        el('line', { x1: EL, x2: EL, y1: TOP - 2, y2: YB, class: 'ax' }, svgE);
+        for (const v of [0, 0.5, 1]) { el('line', { x1: EL - 3, x2: EL, y1: y(v), y2: y(v), class: 'ax' }, svgE); text(svgE, EL - 5, y(v) + 3, v, { 'text-anchor': 'end', class: 'tick-s' }); }
+        for (let t = Math.ceil(t0 / 500) * 500; t <= t1; t += 500) { el('line', { x1: ex(t), x2: ex(t), y1: YB, y2: YB + 3, class: 'ax' }, svgE); text(svgE, ex(t), YB + 12, t, { 'text-anchor': 'middle', class: 'tick-s' }); }
+        text(svgE, 0, 0, 'envelope (/max)', { 'text-anchor': 'middle', class: 'ax-t', transform: `translate(8,${((TOP + YB) / 2).toFixed(1)}) rotate(-90)` });
+        text(svgE, (EL + EW - ER) / 2, EH - 3, 'time from cycle start (ms)', { 'text-anchor': 'middle', class: 'ax-t' });
+        for (const [k, dash] of [[a, ''], [b, ' b']]) {
+          let d = ''; for (let f = 0; f < NF; f++) d += (f ? 'L' : 'M') + ex(t0 + f * 1000 / D.env_fs).toFixed(1) + ' ' + y(c.E[k * NF + f] * D.scale).toFixed(1);
+          el('path', { d, class: 'ecg-' + cls + dash }, svgE);
+          if (c.onset_ms[k] !== null) el('line', { x1: ex(c.onset_ms[k]), x2: ex(c.onset_ms[k]), y1: TOP - 2, y2: YB, class: 'tp-' + cls + dash }, svgE);
+        }
+        const oa = c.onset_ms[a], ob = c.onset_ms[b];
+        if (oa !== null && ob !== null) {
+          const xa = ex(oa), xb = ex(ob), dms = ob - oa;
+          el('rect', { x: Math.min(xa, xb), y: TOP - 2, width: Math.max(Math.abs(xb - xa), 1.5), height: YB - TOP + 2, class: 'band-' + cls }, svgE);
+          if (Math.abs(xb - xa) > 8) el('line', { x1: xa, x2: xb, y1: TOP + 4, y2: TOP + 4, class: 'brk-' + cls, 'marker-start': `url(#${id})`, 'marker-end': `url(#${id})` }, svgE);
+          text(svgE, Math.min(EW - ER - 34, Math.max(EL + 34, (xa + xb) / 2)), ET + 11, `Δ ${dms > 0 ? '+' : ''}${dms.toFixed(0)} ms`, { 'text-anchor': 'middle', class: 'brk-t-' + cls });
+        } else text(svgE, (EL + EW) / 2, ET + 11, 'a channel is not active', { 'text-anchor': 'middle', class: 'tick-s' });
+        heads.push({ line: el('line', { x1: ex(t0), x2: ex(t0), y1: TOP - 2, y2: YB, class: 'playhead' }, svgE), ex, t0, t1 });
+        return svgE;
+      }
+      function drawStrip() {
+        grid.replaceChildren(); heads = [];
+        if (!cur) return;
+        const [a, b] = cur;
+        for (const g of ['lockstep', 'staggered']) for (const pr of cols) { const d = document.createElement('div'); d.className = 'ex-cell'; d.appendChild(cell(g, pr[g], a, b)); grid.appendChild(d); }
+        document.getElementById('d1-ex-title').textContent = `sEMG envelopes of channels ${a + 1} and ${b + 1}, a lockstep and a staggered cycle of the same gesture per column`;
+        document.getElementById('d1-legend').textContent = `Columns: ${cols.map(pr => gname(pr.stage)).join(' · ')}. Top row: lockstep cycles (blue, the joints start within a median ${G.joint_spread_ms_median[1].toFixed(0)} ms of each other). Bottom row: staggered cycles of the same gesture (orange, ${G.joint_spread_ms_median[0].toFixed(0)} ms). Each cell shows 2.4 s around one movement cycle (the shaded span, one stroke between two peaks of joint speed, while a whole gesture spans several), channel ${a + 1} solid, channel ${b + 1} dashed, vertical lines at each channel's activation onset in that cycle, Δ = channel ${b + 1} minus channel ${a + 1}. Below: each column's two true hands over the same 2.4 s, lockstep left and staggered right.`;
+      }
+      function select(a, b) {
+        Object.values(cells).forEach(x => x.classList.remove('sel'));
+        (cells[a + ',' + b] || {}).classList?.add('sel'); (cells[b + ',' + a] || {}).classList?.add('sel');
+        cur = [a, b]; mark(cur);
+        document.getElementById('d1-title').textContent = `Channels ${a + 1} and ${b + 1}`;
+        document.getElementById('d1-stats').textContent = `|onset lag| staggered vs lockstep cycles: Cohen's d ${D.d[a][b].toFixed(2)}, ${pTip(D.p[a][b])} · onset spread over all channels, median: staggered ${G.emg_spread_ms_median[0].toFixed(0)} ms, lockstep ${G.emg_spread_ms_median[1].toFixed(0)} ms`;
+        drawStrip();
+      }
+      let best = [0, 1], bv = -1e9;
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (D.d[i][j] !== null && D.d[i][j] > bv) { bv = D.d[i][j]; best = [i, j]; }
+      document.getElementById('d1-draw').addEventListener('click', () => { cols = drawN(D.pairs); drawStrip(); labelMeshes(); });
+
+      /* hands: per column the lockstep (blue) and the staggered (orange) cycle, each moving from a shared start pose */
+      const canvas = document.getElementById('d1-canvas'), msg = document.getElementById('d1-msg'), mlab = document.getElementById('d1-mlab');
+      const R = HM.right, NV = HM.n_vertices, skinR = makeSkinner(HM.right), buf = new Float64Array(NV * 3), ang = new Float64Array(20);   // all on the right-hand model, left sessions mirrored, so the two hands share one frame
+      const cen = [0, 1, 2].map(k => { let m = 0; for (let v = 0; v < NV; v++) m += R.verts[3 * v + k]; return m / NV; });
+      let renderer = null, camera, controls, views = [];
+      if (window.THREE && THREE.OrbitControls) { try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); msg.hidden = true; } catch (e) { msg.textContent = 'This browser cannot display WebGL.'; } }
+      else msg.textContent = 'The 3D view could not load its WebGL library.';
+      if (renderer) {
+        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.setClearColor(0x000000, 0); renderer.setScissorTest(true);
+        camera = new THREE.PerspectiveCamera(28, 1, 1, 4000);
+        const Rc = 560, elev = 20 * Math.PI / 180; camera.position.set(0, Rc * Math.sin(elev), Rc * Math.cos(elev));   // farther: each hand has half a column
+        controls = new THREE.OrbitControls(camera, canvas); controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false;
+        for (let k = 0; k < NCOL; k++) {                     // per column the lockstep (left) and the staggered hand (right), apart
+          const geos = [], scenes = [], lights = [];
+          for (const col of [LOCK, STAG]) {
+            const scene = new THREE.Scene(), geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NV * 3), 3)); geo.setIndex(HM.faces);
+            scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: new THREE.Color(col), flatShading: true, shininess: 18, side: THREE.DoubleSide })));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5)); const light = new THREE.DirectionalLight(0xffffff, 0.75); scene.add(light);
+            geos.push(geo); scenes.push(scene); lights.push(light);
+          }
+          views.push({ scenes, geos, lights });
+        }
+      }
+      function labelMeshes() {
+        mlab.replaceChildren(...cols.map(pr => {
+          const d = document.createElement('div'), t = document.createElement('span'), row = document.createElement('div'), e = document.createElement('span'), l = document.createElement('span');
+          t.className = 'gn'; t.textContent = gname(pr.stage);
+          row.className = 'sides'; e.className = 'e'; l.className = 'l'; e.textContent = `lockstep · ${pr.lockstep.side}`; l.textContent = `staggered · ${pr.staggered.side}`;
+          row.append(e, l); d.append(t, row); return d;
+        }));
+      }
+      function pose(view, k, ms) {
+        // each hand in its own recorded pose: the two hands have separate views, so no shared start pose is needed, and a
+        // shared start (as in the 4D block) shifts every joint by ~0.2 rad from the recorded posture, distorting the gesture
+        const pair = [cols[k].lockstep, cols[k].staggered];
+        pair.forEach((c, gi) => {
+          const f = Math.min(c.frames - 1, Math.floor(((ms % (c.ctx_pre_ms + c.ctx_post_ms)) / 1000) * D.fs)), skin = skinR, sx = 1;
+          for (let j = 0; j < 20; j++) ang[j] = c.A[f * 20 + j] * D.scale;
+          skin(ang, buf);
+          const pos = view.geos[gi].attributes.position.array;
+          for (let i = 0; i < NV; i++) { const q = 3 * i; pos[q] = buf[q] - sx * cen[0]; pos[q + 1] = buf[q + 2] - cen[2]; pos[q + 2] = -(buf[q + 1] - cen[1]); }
+          view.geos[gi].attributes.position.needsUpdate = true; view.geos[gi].computeVertexNormals(); view.geos[gi].computeBoundingSphere();
+        });
+      }
+      const sizeMesh = () => { if (!renderer) return; const w = canvas.clientWidth, h = canvas.clientHeight; renderer.setSize(w, h, false); camera.aspect = (w / NCOL / 2) / h; camera.updateProjectionMatrix(); };
+      select(best[0], best[1]); labelMeshes(); sizeMesh();
+      window.addEventListener('resize', sizeMesh);
+      const tStart = performance.now(), SLOW = 1;            // real time
+      (function loop(now) {
+        const ms = Math.max(0, now - tStart) * SLOW;
+        for (const h of heads) { const t = h.t0 + ms % (h.t1 - h.t0); h.line.setAttribute('x1', h.ex(t)); h.line.setAttribute('x2', h.ex(t)); }
+        if (renderer) {
+          controls.update();
+          const w = canvas.clientWidth, h = canvas.clientHeight, cw = w / NCOL;
+          views.forEach((v, k) => { pose(v, k, ms); v.scenes.forEach((sc, gi) => { const x = k * cw + gi * cw / 2; renderer.setViewport(x, 0, cw / 2, h); renderer.setScissor(x, 0, cw / 2, h); v.lights[gi].position.copy(camera.position); renderer.render(sc, camera); }); });
+        }
+        requestAnimationFrame(loop);
+      })(tStart);
+    }).catch(e => { heatHost.textContent = 'The hand data could not be loaded.'; console.error(e); });
+  })();
+
+})();
+</script>
