@@ -1,0 +1,39 @@
+pc_size: 2048
+eval_batch_size: 1
+dataloader_num_workers: 4
+seed: 0 
+pred_offset: true
+model_type: 'dit_st'
+num_inference_steps: 4
+model_config:
+  n_layers: 8
+  latent_dim: 256
+  frame_cond: true
+  point_embed: true
+  mask_cond: false
+  pred_offset: true
+  num_neighbors: -1
+  floor_cond: false
+  max_num_forces: 1
+  force_as_token: false
+  force_as_latent: false
+  coeff_cond: false
+  class_token: false
+  transformer_block: SpatialTemporalTransformerBlock
+train_dataset:
+  category: hf-objaverse-v1
+  dataset_list: DATASET_ITEM_LIST_TEST
+  dataset_path: DATASET_FOLDER
+  has_graivty: false
+
+  norm_fac: 5
+  stage: 'deform'
+  mode: 'diff'
+  pc_size: 2048
+  repeat: 1
+  seed: 0
+  n_sample_pro_model: 300
+  n_frames_interval: 2
+  n_training_frames: 24
+  batch_size: 20
+  overfit: false

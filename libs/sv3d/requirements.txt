@@ -1,0 +1,7 @@
+Pillow
+numpy
+transformers
+diffusers
+omegaconf
+rembg
+onnxruntime

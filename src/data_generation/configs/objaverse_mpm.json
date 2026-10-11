@@ -1,0 +1,14 @@
+{
+    "substep_dt": 1e-4,
+    "frame_dt": 0.0417,
+    "frame_num": 48,
+    "nu": 0.4,
+    "E": 2e6,
+    "material": "elastic",
+    "density": 1000,
+    "g": [0, 0, 0],
+    "n_grid": 125,
+    "grid_lim": 10.0,
+    "boundary_conditions": [],
+    "additional_material_params": []
+}

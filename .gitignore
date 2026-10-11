@@ -1,0 +1,49 @@
+# WHITELIST. Every top-level entry is ignored unless re-included below, so data,
+# checkpoints and experiment outputs can never be committed by accident however
+# the tree grows. Already-tracked files are unaffected by ignore rules.
+#
+# experiments/, docs/ and superseded/ are local records with machine paths, so
+# they are deliberately NOT re-included.
+/*
+!/.gitignore
+!/.gitattributes
+!/.python-version
+!/.githooks/
+!/.env.example
+!/README.md
+!/pyproject.toml
+!/uv.lock
+!/requirements.txt
+!/*.py
+!/*.sh
+!/*.ipynb
+!/src/
+!/libs/
+!/tools/
+/tools/*
+!/tools/check_naming.py
+!/tools/naming.ini
+!/tools/runmeta.py
+!/example_ecg_gif/
+
+# Inside re-included directories: caches and heavy or generated files stay out.
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+*.pt
+*.pth
+*.safetensors
+*.npy
+*.npz
+*.svg
+*.png
+*.csv
+outputs/
+checkpoints/
+results/
+src/data_generation/data/
+data_generation/
+# unreleased modality and an internal table script (carried over from the old list)
+*emg*
+emg*
+gen_whole_heart_table.py

@@ -1,0 +1,115 @@
+# ============================================================
+# ECG-conditioned 4-D heart mesh trajectory generation
+# PhysCtrl / ECGCondMDM with ECGDelayEncoder  –  UK Biobank
+# (12-lead ECG + 12x12 T-peak delay matrix)
+# ============================================================
+
+# ------ General --------------------------------------------------
+image_size: 128   # unused; kept for TrainingConfig schema compat
+output_dir: ../nips26-physctrl-outputs/ecg_heart_delayqrs_${model_config.n_layers}L_${model_config.latent_dim}d_${dataset.n_training_frames}frames
+seed: 42
+
+# ------ Training -------------------------------------------------
+train_batch_size: 12
+eval_batch_size:  64
+num_train_epochs: 200
+max_train_steps:  null
+gradient_accumulation_steps: 4
+gradient_checkpointing: true
+learning_rate: 1.0e-5
+scale_lr: false
+lr_scheduler: cosine_with_warmup
+lr_warmup_steps: 200
+use_8bit_adam: false
+allow_tf32: true
+dataloader_num_workers: 8
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 1.0e-2
+adam_epsilon: 1.0e-8
+max_grad_norm: 1.0
+prediction_type: null
+mixed_precision: bf16
+
+# ------ Logging / checkpointing ----------------------------------
+vis_dir: vis
+logging_dir: logs
+report_to: tensorboard
+local_rank: -1
+tracker_project_name: ecg_heart_diffusion_delay
+checkpointing_steps: 1000
+checkpoints_total_limit: 5
+resume_from_checkpoint: latest
+enable_xformers_memory_efficient_attention: true
+validation_steps: 500
+validation_train_steps: 2000
+validation_sanity_check: false
+resume_step: null
+push_to_hub: false
+set_grads_to_none: true
+overfit: false
+
+# ------ Evaluation -----------------------------------------------
+num_val_batches: 2
+num_inference_steps: 50
+early_stop_patience: 3   # validations without improvement before stopping (0 = disabled)
+
+# ------ Loss weights ---------------------------------------------
+lambda_vel: 1.0
+lambda_mask: 0.0
+lambda_momentum: 0.0
+lambda_deform: 0.0
+
+# ------ Classifier-free guidance ---------------------------------
+condition_drop_rate: 0.1
+
+# ------ Model ----------------------------------------------------
+model_type: ecg_cond_mdm
+pred_offset: true
+pc_size: 388
+
+model_config:
+  n_layers: 8
+  latent_dim: 256
+  n_ecg_tokens: 8               # CNN ECG tokens (delay adds 12 more)
+  pred_offset: true
+  transformer_block: SpatialTemporalTransformerBlock
+  ecg_encoder_type: delay       # 'cnn' | 'tech' | 'delay'
+  n_leads: 12                   # → 12 additional conditioning tokens
+  delay_hidden: 128             # hidden dim of per-row MLP
+
+# ------ Dataset --------------------------------------------------
+dataset:
+  ecg_dir:        ../data/ukb_heartmesh_processed/ecg_resting
+  mesh_dir:       ../data/ukb_heartmesh_processed/ctrl_mesh_ply
+  npy_dir:        ../data/ukb_heartmesh_processed/ctrl_mesh
+  delay_mat_path: ../ukb_heart_mesh_visual/all_ecg_delay_matrix.npz
+  delay_key:      QRS        # one of: QRS, T_peak, T_offset
+  seq_len: 50
+  n_training_frames: 49
+  n_points: 388
+  train_split: 0.8
+  scale: 1.0
+  # Drop subjects whose max per-vertex displacement from the rest frame exceeds
+  # this value (mesh units, i.e. mm for UK Biobank). Subjects with extreme
+  # volume changes (artifact / pathology) are removed once and cached.
+  filter_max_displacement: 50.0
+  # Gaussian temporal smoothing sigma (frames). 0 = disabled.
+  smooth_sigma: 0
+
+train_dataset:
+  dataset_path: ""
+  dataset_list: ""
+  stage: deform
+  mode: diff
+  pc_size: 388
+  repeat: 1
+  seed: 42
+  n_sample_pro_model: 1
+  n_frames_interval: 1
+  n_training_frames: 49
+  batch_size: 12
+  overfit: false
+  norm_fac: 0
+  has_gravity: false
+  max_num_forces: 1

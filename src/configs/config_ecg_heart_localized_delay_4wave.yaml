@@ -1,0 +1,143 @@
+# ============================================================
+# ECG-conditioned 4-D heart mesh trajectory generation
+# PhysCtrl / ECGCondMDM with ECGLocalizedDelayEncoder
+#
+# Shift-invariant, three-branch ECG encoder:
+#   • Waveform-core token  (CoTAR core from canonicalized-waveform branch)
+#   • Delay-core   token   (per-lead delay descriptors → TeCh CoTAR stack
+#                           → mean-pool)
+#   • Waveform-pool tokens (learnable queries attention-pool the refined
+#                           per-lead waveform embeddings)
+#
+# Delays are computed internally via learnable event-templates and circular
+# normalized cross-correlation against an R-peak-detected reference lead, so
+# no external delay_mat is required.
+# ============================================================
+
+# ------ General --------------------------------------------------
+image_size: 128   # unused; kept for TrainingConfig schema compat
+output_dir: ../nips26-physctrl-outputs/ecg_heart_localized_delay_4wave_${model_config.n_layers}L_${model_config.latent_dim}d_${dataset.n_training_frames}frames
+seed: 42
+
+# ------ Training -------------------------------------------------
+train_batch_size: 4
+eval_batch_size:  4
+num_train_epochs: 200
+max_train_steps:  null
+gradient_accumulation_steps: 4
+gradient_checkpointing: true
+learning_rate: 1.0e-5
+scale_lr: false
+lr_scheduler: cosine_with_warmup
+lr_warmup_steps: 200
+use_8bit_adam: false
+allow_tf32: true
+dataloader_num_workers: 8
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 1.0e-2
+adam_epsilon: 1.0e-8
+max_grad_norm: 1.0
+prediction_type: null
+mixed_precision: bf16
+
+# ------ Logging / checkpointing ----------------------------------
+vis_dir: vis
+logging_dir: logs
+report_to: tensorboard
+local_rank: -1
+tracker_project_name: ecg_heart_diffusion_localized_delay
+checkpointing_steps: 1000
+checkpoints_total_limit: 5
+resume_from_checkpoint: latest
+enable_xformers_memory_efficient_attention: true
+validation_steps: 500
+validation_train_steps: 2000
+validation_sanity_check: false
+resume_step: null
+push_to_hub: false
+set_grads_to_none: true
+overfit: false
+
+# ------ Evaluation -----------------------------------------------
+num_val_batches: 2
+num_inference_steps: 50
+early_stop_patience: 3
+
+# ------ Loss weights ---------------------------------------------
+# Existing diffusion losses
+lambda_vel: 1.0
+lambda_mask: 0.0
+lambda_momentum: 0.0
+lambda_deform: 0.0
+
+# Encoder auxiliary losses (read only by ECGLocalizedDelayEncoder).
+# Defaults follow the method section's suggestions: λ1=0.1, λ2=0.5,
+# λ3=0.01, λ4=0.1.
+lambda_diversity: 0.1     # template orthogonality (rectified cosine²)
+lambda_shift_inv: 0.5     # MSE between Z_cond(ecg) and Z_cond(shift(ecg))
+lambda_sparsity:  0.01    # softmax entropy of the per-cycle delay maps
+lambda_core_var:  0.1     # batch std of guidance-net angle φ*
+
+# ------ Classifier-free guidance ---------------------------------
+condition_drop_rate: 0.1
+
+# ------ Model ----------------------------------------------------
+model_type: ecg_cond_mdm
+pred_offset: true
+pc_size: 388
+
+model_config:
+  n_layers: 8
+  latent_dim: 256
+  # Advisory only; overridden at runtime by encoder.n_tokens
+  # (= 1 wave-core + 1 delay-core + n_wave_tokens  -> 3 by default).
+  n_ecg_tokens: 6
+  pred_offset: true
+  transformer_block: SpatialTemporalTransformerBlock
+  ecg_encoder_type: localized_delay
+  localized_delay_encoder:
+    n_leads: 12
+    ref_lead: 1                           # lead II in the standard 12-lead order
+    n_templates: 4
+    template_lengths: [20, 40, 80, 160]   # samples at 500 Hz ≈ 40–320 ms
+    k_cycles: 2
+    min_dist: 200                         # ≈ 0.4 s at 500 Hz (max HR ~150 bpm)
+    seq_len: 600
+    n_wave_tokens: 4
+    d_core: 64
+    n_delay_layers: 2                     # CoTAR stack that centralizes the
+                                          # 12 per-lead delay tokens
+    n_heads: 4
+    dropout: 0.1
+    guidance_hidden: 128
+
+# ------ Dataset --------------------------------------------------
+dataset:
+  ecg_dir:  ../data/ukb_heartmesh_processed/ecg_resting
+  mesh_dir: ../data/ukb_heartmesh_processed/ctrl_mesh_ply
+  npy_dir:  ../data/ukb_heartmesh_processed/ctrl_mesh
+  seq_len:  50
+  n_training_frames: 49
+  n_points: 388
+  train_split: 0.8
+  scale: 1.0
+  filter_max_displacement: 50.0
+  smooth_sigma: 0
+
+train_dataset:
+  dataset_path: ""
+  dataset_list: ""
+  stage: deform
+  mode: diff
+  pc_size: 388
+  repeat: 1
+  seed: 42
+  n_sample_pro_model: 1
+  n_frames_interval: 1
+  n_training_frames: 49
+  batch_size: 12
+  overfit: false
+  norm_fac: 0
+  has_gravity: false
+  max_num_forces: 1

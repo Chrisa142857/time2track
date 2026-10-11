@@ -1,0 +1,3 @@
+#!/bin/sh
+# Naming and run-layout rules (tools/check_naming.py, rules in tools/naming.ini).
+exec python3 "$(git rev-parse --show-toplevel)/tools/check_naming.py" --staged

@@ -1,0 +1,76 @@
+image_size: 128
+output_dir: ./outputs/dit_${model_config.n_layers}layers_${pc_size}p_${train_dataset.category}_${train_dataset.n_training_frames}frames_pointembed_latent${model_config.latent_dim}_deform${lambda_deform}_8gpus_base
+seed: 0
+train_batch_size: 2
+eval_batch_size: 4
+num_train_epochs: 50
+max_train_steps: 60000
+gradient_accumulation_steps: 25
+gradient_checkpointing: true
+learning_rate: 1e-4
+scale_lr: false
+lr_scheduler: "costant_with_warmup"
+lr_warmup_steps: 100
+use_8bit_adam: false
+allow_tf32: true
+dataloader_num_workers: 48
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 1.e-2
+adam_epsilon: 1.e-08
+max_grad_norm: 1.0
+prediction_type: null
+vis_dir: vis
+logging_dir: logs
+mixed_precision: 'bf16'
+report_to: 'tensorboard'
+local_rank: -1
+checkpointing_steps: 2500
+checkpoints_total_limit: 10
+resume_from_checkpoint: latest
+enable_xformers_memory_efficient_attention: true
+validation_steps: 500
+validation_train_steps: 2000
+validation_sanity_check: true
+tracker_project_name: 'diffusion'
+push_to_hub: false
+set_grads_to_none: true
+lambda_vel: 1.0
+lambda_mask: 0.0
+lambda_momentum: 0.0
+lambda_deform: 0.001
+pc_size: 2048
+condition_drop_rate: 0.0
+model_type: 'dit_st'
+model_config:
+  n_layers: 8
+  latent_dim: 256
+  frame_cond: true
+  point_embed: true
+  mask_cond: false
+  pred_offset: true
+  num_neighbors: -1
+  floor_cond: false
+  max_num_forces: 1
+  force_as_token: false
+  force_as_latent: false
+  coeff_cond: false
+  class_token: false
+  transformer_block: SpatialTemporalTransformerBlock
+train_dataset:
+  category: hf-objaverse-v1
+  dataset_path: DATASET_FOLDER
+  dataset_list: DATASET_ITEM_LIST
+  has_gravity: true # no gravity
+  max_num_forces: ${model_config.max_num_forces}
+  norm_fac: 5
+  stage: 'deform'
+  mode: 'diff'
+  pc_size: ${pc_size}
+  repeat: 1
+  seed: 0
+  n_sample_pro_model: 300
+  n_frames_interval: 2
+  n_training_frames: 24
+  batch_size: 20
+  overfit: false

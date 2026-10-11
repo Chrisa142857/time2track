@@ -1,0 +1,112 @@
+# ============================================================
+# ECG-conditioned 4-D heart mesh trajectory generation
+# PhysCtrl / ECGCondMDM  –  UK Biobank dataset
+# ============================================================
+
+# ------ General --------------------------------------------------
+image_size: 128   # unused; kept for TrainingConfig schema compat
+output_dir: ../nips26-physctrl-outputs/ecg_heart_${model_config.n_layers}L_${model_config.latent_dim}d_${dataset.n_training_frames}frames
+seed: 42
+
+# ------ Training -------------------------------------------------
+train_batch_size: 8
+eval_batch_size:  32
+num_train_epochs: 200
+max_train_steps:  null        # derived from epochs if null
+gradient_accumulation_steps: 4
+gradient_checkpointing: true
+learning_rate: 1.0e-5
+scale_lr: false
+lr_scheduler: cosine_with_warmup
+lr_warmup_steps: 200
+use_8bit_adam: false
+allow_tf32: true
+dataloader_num_workers: 8
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 1.0e-2
+adam_epsilon: 1.0e-8
+max_grad_norm: 1.0
+prediction_type: null
+mixed_precision: bf16
+
+# ------ Logging / checkpointing ----------------------------------
+vis_dir: vis
+logging_dir: logs
+report_to: tensorboard
+local_rank: -1
+tracker_project_name: ecg_heart_diffusion
+checkpointing_steps: 1000
+checkpoints_total_limit: 5
+resume_from_checkpoint: latest
+enable_xformers_memory_efficient_attention: true
+validation_steps: 500
+validation_train_steps: 2000
+validation_sanity_check: false
+resume_step: null
+push_to_hub: false
+set_grads_to_none: true
+overfit: false
+
+# ------ Evaluation -----------------------------------------------
+num_val_batches: 2        # batches to generate during validation
+num_inference_steps: 50   # DDIM steps at inference
+early_stop_patience: 3   # validations without improvement before stopping (0 = disabled)
+
+# ------ Loss weights ---------------------------------------------
+lambda_vel: 1.0           # velocity consistency loss weight
+lambda_mask: 0.0          # unused (no drag mask)
+lambda_momentum: 0.0      # unused
+lambda_deform: 0.0        # unused
+
+# ------ Classifier-free guidance ---------------------------------
+# Set > 0 to enable CFG training (randomly drops ECG conditioning)
+condition_drop_rate: 0.1
+
+# ------ Model ----------------------------------------------------
+model_type: ecg_cond_mdm
+pred_offset: true
+pc_size: 388              # UK Biobank heart mesh vertex count
+
+model_config:
+  n_layers: 8
+  latent_dim: 256
+  n_ecg_tokens: 8         # number of ECG conditioning tokens
+  pred_offset: true
+  transformer_block: SpatialTemporalTransformerBlock
+
+# ------ Dataset --------------------------------------------------
+dataset:
+  ecg_dir:  ../data/ukb_heartmesh_processed/ecg_resting  # directory with {subid}.npy files (12,600) float32
+  mesh_dir: ../data/ukb_heartmesh_processed/ctrl_mesh_ply             # directory with {subid}_{...}/ sub-dirs
+  npy_dir:  ../data/ukb_heartmesh_processed/ctrl_mesh                          # optional: pre-computed frames.npy root
+  seq_len:  50                            # total frames available per subject
+  n_training_frames: 49                   # target frames returned per sample
+  n_points: 388                           # heart mesh vertex count (fixed)
+  train_split: 0.8                        # fraction used for training
+  scale: 1.0                              # optional coordinate scale after centering
+  # Drop subjects whose max per-vertex displacement from the rest frame exceeds
+  # this value (mesh units, i.e. mm for UK Biobank). Subjects with extreme
+  # volume changes (artifact / pathology) are removed once and cached.
+  filter_max_displacement: 50.0
+  # Gaussian temporal smoothing sigma (frames). 0 = disabled.
+  smooth_sigma: 0
+
+
+# (keep train_dataset alias for TrainingConfig schema compat)
+train_dataset:
+  dataset_path: ""
+  dataset_list: ""
+  stage: deform
+  mode: diff
+  pc_size: 388
+  repeat: 1
+  seed: 42
+  n_sample_pro_model: 1
+  n_frames_interval: 1
+  n_training_frames: 49
+  batch_size: 4
+  overfit: false
+  norm_fac: 0
+  has_gravity: false
+  max_num_forces: 1
