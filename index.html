@@ -92,8 +92,6 @@ p { margin: 0; }
 .hero { border-bottom: 1px solid var(--rule); }
 .hero-inner { max-width: var(--wide); margin: 0 auto; padding: 3.5rem 16px 1.5rem; display: grid; gap: 1.4rem; }
 .hero h1 { font-size: var(--step-4); font-weight: 800; font-stretch: 78%; letter-spacing: -0.02em; line-height: 0.95; }
-.hero .subtitle { font: 500 var(--step-2)/1.25 var(--font-display); font-stretch: 92%; max-width: 34ch; }
-.hero .lede { max-width: 62ch; color: var(--ink); background: color-mix(in srgb, var(--paper) 80%, transparent); }
 .hero .meta { display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem; align-items: center; font: 400 0.82rem/1.4 var(--font-mono); color: var(--muted); }
 .btn {
   display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.9rem;
@@ -386,8 +384,6 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
   <div class="hero-inner">
     <p class="eyebrow">NeurIPS 2026 · Ziquan Wei, Tingting Dan, Guorong Wu</p>
     <h1>Time2Track</h1>
-    <p class="subtitle">Delay-aware ECG conditioning for individualized 4D cardiac motion generation</p>
-    <p class="lede">Time2Track generates the 4D motion of a heart mesh from a resting 12-lead ECG and one rest mesh, using wavelet morphology and inter-lead delay tokens to keep the individual variation that generic motion diffusion collapses to an average.</p>
     <div class="meta">
       <a class="btn" href="https://github.com/Chrisa142857/time2track">Code (GitHub)</a>
       <span>UK Biobank · 40,462 ECG–mesh pairs</span>
@@ -444,9 +440,8 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
 <div class="hand4d" aria-labelledby="hand4d-title">
   <div class="motion-head">
     <div class="text">
-      <h2 id="hand4d-title">Lockstep and staggered hands, overlaid</h2>
-      <p>Five test gesture cycles of <span id="h-gesture"></span> whose true joints start nearly together (lockstep, blue) and five whose joints start one after another (staggered, orange) move from one shared start pose, so only their motion differs.</p>
-      <p>The ground truth keeps the two kinds of movement apart, while EMGFormer starts the joints of every hand at similar times, with or without Time2Track's sEMG delay tokens, so the timing difference collapses.</p>
+      <p class="eyebrow">TL;DR</p>
+      <h2 id="hand4d-title" class="tldr">From sEMG, EMGFormer starts the joints of every hand at similar times, with or without Time2Track's delay tokens, so lockstep and staggered movements collapse into one.</h2>
     </div>
     <div class="controls">
       <div class="seg"><select id="h-gesture-sel" aria-label="Gesture"></select></div>
@@ -472,19 +467,13 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
       <p class="viewer-msg" id="h-msg">Loading the 4D hands…</p>
     </div>
   </div>
-  <div class="viewer-foot">
-    <span class="note" id="h-mode-note"></span>
-  </div>
   <figure>
     <div class="chart" id="h-gap"></div>
-    <figcaption><b>Lockstep–staggered gap.</b> The difference between the five lockstep and the five staggered hands in the fraction of joints that have started to move, averaged from 200 ms before to 500 ms after the cycle start, is <span id="h-gap-list"></span>.</figcaption>
   </figure>
   <figure>
     <div class="cohort" id="h-cohort"></div>
     <div class="ramp-legend"><span class="note">true joint onset spread</span><span class="mono" id="h-ramp-lo"></span><i></i><span class="mono" id="h-ramp-hi"></span></div>
-    <figcaption><b>The same collapse across <span id="h-n"></span> random lockstep and staggered test cycles of all gestures.</b> Each curve is the fraction of a cycle's joints that have started to move, coloured by the true joint onset spread, and the curves rise in one step for blue and gradually for orange cycles in the ground truth but rise alike for every decoder.</figcaption>
   </figure>
-  <p class="note" id="h-note"></p>
   <div class="facts heart-facts">
     <div class="fact"><b class="num">24,974</b><span>sEMG recordings with motion-capture hand pose (emg2pose), each with a usable gesture cycle</span></div>
     <div class="fact"><b class="num">16 × 7,790</b><span>sEMG channels × samples at 2 kHz per input</span></div>
@@ -1491,7 +1480,6 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
 
       /* lockstep-staggered gap: difference between the two groups in the mean fraction of joints that have started */
       const frac = (h, k, f) => { const [kk, n] = started(h, k, f); return n ? kk / n : 0; };
-      const meanGap = g => { const v = g.filter((_, f) => tms(f) >= -200 && tms(f) <= 500); return v.reduce((x, y) => x + y, 0) / v.length; };   // over the analysed cycle
       function drawGap() {
         const hostG = document.getElementById('h-gap'); hostG.replaceChildren();
         const W = 720, H = 260, L = 46, R2 = 14, T = 44, B = 36, hi = Math.ceil(Math.max(...gap.flat()) * 10) / 10 || 0.1;
@@ -1509,7 +1497,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
       /* cohort: fraction of joints started over time, every lockstep and staggered cycle, coloured by true onset spread */
       (function drawCohort() {
         const c = D.cohort, ON = {}; for (const k of SRC) ON[k] = b64(c.onsets[k]);
-        document.getElementById('h-n').textContent = c.n; document.getElementById('h-ramp-lo').textContent = SP_LO + ' ms'; document.getElementById('h-ramp-hi').textContent = SP_HI + ' ms';
+        document.getElementById('h-ramp-lo').textContent = SP_LO + ' ms'; document.getElementById('h-ramp-hi').textContent = SP_HI + ' ms';
         const W = 1100, H = 300, PL = 46, gp = 24, T = 28, B = 36, pw = (W - PL - gp * (M - 1) - 6) / M;
         const y = v => T + (1 - v) * (H - T - B), colors = c.true_spread_ms.map(rampColor);
         const order = [...Array(c.n).keys()].sort((p, q) => c.true_spread_ms[p] - c.true_spread_ms[q]);
@@ -1531,7 +1519,6 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
           heads.push({ x: f => x(tms(f)), line: el('line', { x1: x(T0), x2: x(T0), y1: T, y2: H - B, class: 'playhead' }, svg) });
         });
       })();
-      const setNote = g => { document.getElementById('h-note').textContent = `Hands are the five per group of ${GESTURE} (of ${g.n.lockstep} lockstep and ${g.n.staggered} staggered test cycles) whose true joint onset spread is closest to the group median, chosen on the ground truth only and shown without identifiers. Both models are shown at their first seed (2 kHz predictions), and EMGFormer w/ Time2Track is EMGFormer with Time2Track's delay-token conditioning (cross-attention over per-channel delay tokens), the delays taken from sEMG activation onsets, the branch trained at a tenfold learning rate with a loss on the joints' timing spread, the strongest delay variant we trained. Over all within-gesture cycles, EMGFormer keeps 21 to 24 % of the true gap in joint onset spread and this delay variant 23 % (three seeds each).`; };
 
       /* viewer */
       let frame = 0, mode = 'overlay', playing = !window.matchMedia('(prefers-reduced-motion: reduce)').matches, renderer = null;
@@ -1585,7 +1572,6 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
       function layout() {
         const w = host.clientWidth, cells = []; chips = []; ovText = [];
         grid4d.classList.toggle('overlay', mode === 'overlay');
-        document.getElementById('h-mode-note').textContent = 'Per model, the five lockstep hands (blue) and the five staggered hands (orange) are overlaid within their group, every hand moving from one shared start pose by its own change in joint angles (left-hand sessions mirrored onto the right hand). Each dot fills with the fraction of that hand\'s joints that have started to move, the bar shows the lockstep–staggered gap at this moment with the ground truth\'s gap as a yellow tick, and dragging rotates all views.';
         if (mode === 'overlay') {
           cols = w >= 900 ? 2 * M : 2; rows = 2 * M / cols;        // one row on wide screens: lockstep | staggered per model
           legendHeads([...Array(N).keys()]);
@@ -1629,9 +1615,7 @@ footer { max-width: var(--wide); margin: 3rem auto 0; padding: 2rem 16px 3rem; b
           return Math.abs(m('lockstep') - m('staggered'));
         }));
         gapMax = Math.max(...gap.flat(), 1e-6);
-        document.getElementById('h-gesture').textContent = GESTURE;
-        document.getElementById('h-gap-list').textContent = `${SRC.map((src, m) => `${meanGap(gap[m]).toFixed(2)} for ${src === 'Ground truth' ? 'the ground truth' : src}`).join(', ')} (${GESTURE})`;
-        drawGap(); setNote(g); layout();
+        drawGap(); layout();
       }
       const gsel = document.getElementById('h-gesture-sel');
       D.gestures.forEach((g, k) => gsel.appendChild(Object.assign(document.createElement('option'), { value: k, textContent: `${pretty(g.name)} (${g.n.lockstep} + ${g.n.staggered} cycles)` })));
