@@ -114,7 +114,7 @@ model_config:
     dropout: 0.1
     use_pos_embed: true
     pos_embed_type: '2d'
-    pretrained_path: ../physctrl/PhysioWave/ecg.pth
+    pretrained_path: ../PhysioWave/ecg.pth
     freeze_backbone: false
     # Delay branch
     n_morph_tokens: 8

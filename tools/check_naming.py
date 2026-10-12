@@ -26,6 +26,7 @@ import paths  # noqa: E402
 
 RUN_RE = re.compile(r'^(\d{4})\.(\d{2})\.(\d{2})-run(\d{2})_[a-z0-9][a-z0-9.-]*$')
 METRIC = re.compile(r'^[A-Za-z][A-Za-z-]*\d*\.\d+([-,]\d*\.?\d+)*$')    # sep0.196-0.219, val-loss0.0123
+SEED = re.compile(r'seeds?\d+|(^|[_.-])s\d+($|[_.-])')                 # seed42, seeds42-43-44, ctrl_s42
 BINDINGS = ('config.yaml', 'git_commit.txt', 'inputs.txt', 'env.txt')
 TOP_FILES = re.compile(r'^(INDEX\.tsv|README\.md|MIGRATION_.*)$')
 DOC_EXT = {'.py', '.sh', '.md', '.log', '.yaml', '.yml', '.txt', '.ipynb'}
@@ -44,7 +45,7 @@ def stem(name):
 
 
 def carries_metric(name):
-    return any(METRIC.match(t) for t in re.split(r'_', stem(name))) or bool(re.search(r'seed\d+', name))
+    return any(METRIC.match(t) for t in re.split(r'_', stem(name))) or bool(SEED.search(name))
 
 
 def bare_tokens(name, rules):
@@ -135,7 +136,8 @@ def self_test(rules):
     flagged = ['model_final_v2_updated.pth', 'edges_v8.jsonl', 'results_old.json', 'e26.py.bak_pooled',
                'best_model', 'es_OLD_rawgt.npz', 'diag_treat_final.json']
     passing = ['best_val-loss0.012345_step900', 'edges_g1g2g3_sep0.196-0.219-0.217_seed42.jsonl',
-               'ac_drop_V2', 'fig1b_A_v3.npz', 'val_index.json', 'newton.py', 'final_seed7.npz']
+               'ac_drop_V2', 'fig1b_A_v3.npz', 'val_index.json', 'newton.py', 'final_seed7.npz',
+               'ctrl_lag10_s42_final.pt', 'emg2pose_delay_minus_base_seeds42-43-44.json']
     wrong = [n for n in flagged if not bare_tokens(n, rules)] + [n for n in passing if bare_tokens(n, rules)]
     assert not wrong, f'self-test failed on {wrong}'
     print('self-test ok')

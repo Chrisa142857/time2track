@@ -11,6 +11,7 @@
 !/.githooks/
 !/.env.example
 !/README.md
+!/LICENSE
 !/pyproject.toml
 !/uv.lock
 !/requirements.txt
@@ -25,6 +26,8 @@
 !/tools/naming.ini
 !/tools/runmeta.py
 !/example_ecg_gif/
+!/data_prep/
+!/reproduce/
 
 # Inside re-included directories: caches and heavy or generated files stay out.
 __pycache__/
@@ -43,7 +46,10 @@ checkpoints/
 results/
 src/data_generation/data/
 data_generation/
-# unreleased modality and an internal table script (carried over from the old list)
-*emg*
-emg*
+# sEMG diffusion and regressor code that no result of the paper uses, and an internal table script
+/src/*emg*
+/src/configs/*emg*
+/src/dataset/emg2pose_dataset.py
+/src/model/emg_joint*
+/*emg*.sh
 gen_whole_heart_table.py

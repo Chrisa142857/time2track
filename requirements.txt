@@ -27,6 +27,7 @@ timm
 scikit-image
 open3d
 PyMCubes
+PyWavelets
 plyfile
 transformers
 cython

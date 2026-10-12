@@ -17,7 +17,7 @@ ECG data expected layout:
     {ecg_dir}/{subid}.npy                        <- fast path: pre-normalised (12, 600) float32
     {ecg_dir}/{subid}_2_0.csv                    <- fallback: raw (12, 600); z-score applied on load
 
-Run  python precompute_npy.py  once to populate the fast-path .npy files.
+The fast-path .npy files are optional: without them the loader reads the PLY / CSV fallbacks.
 """
 
 import json

@@ -16,25 +16,29 @@
 
 set -euo pipefail
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}   # caller may choose the GPU
-CONFIG=${2:-src/configs/config_ecg_heart.yaml}
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+# Paths given on the command line are relative to the caller's directory. Config fields
+# (output_dir, dataset paths, pretrained_path) are relative to src/, as in training.
+CONFIG=$(realpath -m "${2:-src/configs/config_ecg_heart.yaml}")
 
 # Resolve default checkpoint: prefer best_model inside the output_dir encoded in the config
 if [ -z "${1:-}" ]; then
-    OUTPUT_DIR=$(python3 -c "
+    OUTPUT_DIR=$(cd "${ROOT}/src" && python3 -c "
+import os
 from omegaconf import OmegaConf
 cfg = OmegaConf.load('${CONFIG}')
-print(cfg.output_dir)
+print(os.path.abspath(cfg.output_dir))
 ") || { echo "cannot read output_dir from ${CONFIG}" >&2; exit 1; }
     CHECKPOINT="${OUTPUT_DIR}/best_model"
 else
-    CHECKPOINT="$1"
+    CHECKPOINT=$(realpath -m "$1")
 fi
 
 NP_DIR="$(dirname "${CHECKPOINT}")/npy_eval"
 NUM_VAL_BATCHES=${3:--1}   # -1 = full val set
 
 # Metrics are appended to this CSV (override with RESULTS_CSV=...)
-RESULTS_CSV=${RESULTS_CSV:-$(dirname "${CHECKPOINT}")/eval_metrics.csv}
+RESULTS_CSV=$(realpath -m "${RESULTS_CSV:-$(dirname "${CHECKPOINT}")/eval_metrics.csv}")
 
 echo "=================================================="
 echo " ECG Heart Mesh – Evaluation"
@@ -45,14 +49,12 @@ echo "  Per-sample save : ${NP_DIR}"
 echo "  Results CSV     : ${RESULTS_CSV}"
 echo "=================================================="
 
-mkdir -p results
 mkdir -p "${NP_DIR}"
 
-# Change to src/ so relative imports resolve correctly
-# cd "$(dirname "$0")/src"
+# Change to src/ so relative imports and the src-relative config paths resolve
+cd "${ROOT}/src"
 
-
-python src/eval_ecg_mesh.py \
+python eval_ecg_mesh.py \
     --config             "${CONFIG}"        \
     --checkpoint         "${CHECKPOINT}"    \
     --num_val_batches    "${NUM_VAL_BATCHES}"   \

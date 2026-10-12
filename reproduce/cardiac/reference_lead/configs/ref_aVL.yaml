@@ -1,0 +1,155 @@
+# ============================================================
+# Reference-lead sensitivity (Appendix A.7, Table 9), aVL arm.
+# Derived from src/configs/config_ecg_heart_delaywavev3.yaml. Changes:
+#   ref_lead 4 (aVL) instead of 1 (lead II), warm start from the
+#   trained Time2Track model, a fixed budget of 12,000 optimiser steps
+#   on one GPU (batch 14 x grad-accum 4) without early stopping,
+#   validation every 250 steps, at most 3 checkpoints kept.
+# Score the final checkpoint-12000.
+# ============================================================
+
+# ------ General --------------------------------------------------
+image_size: 128
+output_dir: ../nips26-physctrl-outputs/reference_lead_aVL   # relative to src/, like the base config
+# trained Time2Track weights (bash download_ckpts.sh), relative to src/. Optimizer and LR schedule start fresh
+warm_start_from: ../nips26-physctrl-outputs/ecg_heart_delaywavev3_8L_256d_49frames/best_model
+seed: 42
+
+# ------ Training -------------------------------------------------
+train_batch_size: 14
+eval_batch_size:  32
+num_train_epochs: 10000   # upper bound only, max_train_steps sets the budget
+max_train_steps:  12000
+gradient_accumulation_steps: 4
+gradient_checkpointing: true
+learning_rate: 1.0e-5
+scale_lr: false
+lr_scheduler: cosine_with_warmup
+lr_warmup_steps: 200
+use_8bit_adam: false
+allow_tf32: true
+dataloader_num_workers: 8
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 1.0e-2
+adam_epsilon: 1.0e-8
+max_grad_norm: 1.0
+prediction_type: null
+mixed_precision: bf16
+
+# ------ Logging / checkpointing ----------------------------------
+vis_dir: vis
+logging_dir: logs
+report_to: tensorboard
+local_rank: -1
+tracker_project_name: reference_lead_aVL
+checkpointing_steps: 1000
+checkpoints_total_limit: 3
+resume_from_checkpoint: latest
+enable_xformers_memory_efficient_attention: true
+validation_steps: 250
+validation_train_steps: 2000
+validation_sanity_check: false
+resume_step: null
+push_to_hub: false
+set_grads_to_none: true
+overfit: false
+
+# ------ Evaluation -----------------------------------------------
+num_val_batches: 2
+num_inference_steps: 50
+early_stop_patience: 0          # no early stop, every arm gets the full budget
+
+# ------ Loss weights ---------------------------------------------
+# Existing diffusion losses
+lambda_vel: 1.0
+lambda_mask: 0.0
+lambda_momentum: 0.0
+lambda_deform: 0.0
+
+# Encoder auxiliary losses (DelayWave-V2-specific).
+# Resolved dynamically by the train-loop aggregator at
+# src/train_ecg_mesh.py:317-322 via getattr(args, f'lambda_{name}', 0.0).
+lambda_delay_subject_align: 0.5    # InfoNCE on subject identity
+lambda_wavelet_diversity:   0.01   # gentle diversity stabilizer
+lambda_sparsity:            0.002  # gentle soft-argmax sharpener
+lambda_delay_norm:          0.0    # off by default; ablation knob
+
+# ------ Classifier-free guidance ---------------------------------
+condition_drop_rate: 0.1
+
+# ------ Model ----------------------------------------------------
+model_type: ecg_cond_mdm
+pred_offset: true
+pc_size: 388
+
+model_config:
+  n_layers: 8
+  latent_dim: 256
+  # Advisory only; overridden at runtime by encoder.n_tokens
+  # (= 1 delay-core + n_morph_tokens, default 1 + 8 = 9).
+  n_ecg_tokens: 9
+  pred_offset: true
+  transformer_block: SpatialTemporalTransformerBlock
+  ecg_encoder_type: delaywavev3
+  delaywavev3_encoder:
+    seq_len: 600
+    n_leads: 12
+    ref_lead: 4                        # aVL
+    # Wavelet front-end (matches PhysioWave ECG recipe)
+    max_level: 3
+    wave_kernel_size: 24
+    wavelet_names: [db4, db6, sym4, coif2]
+    use_separate_channel: true
+    # Morphology backbone (mirrors PhysioWaveECGEncoder)
+    patch_size: 64
+    embed_dim: 384
+    depth: 8
+    num_heads: 12
+    mlp_ratio: 4.0
+    dropout: 0.1
+    use_pos_embed: true
+    pos_embed_type: '2d'
+    pretrained_path: ../PhysioWave/ecg.pth
+    freeze_backbone: false
+    # Delay branch
+    n_morph_tokens: 8
+    tau_max: 50                        # ±50 samples ≈ ±100 ms at 500 Hz
+    beta_init: 2.0                     # softplus-init temperature
+    delay_num_heads: 4
+    delay_mlp_ratio: 4.0
+    # Contrastive aug knobs
+    align_noise_std: 0.05
+    align_amp_std: 0.1
+    align_temperature: 0.1
+
+# ------ Dataset --------------------------------------------------
+dataset:
+  ecg_dir:  ../data/ukb_heartmesh_processed/ecg_resting
+  mesh_dir: ../data/ukb_heartmesh_processed/ctrl_mesh_ply
+  npy_dir:  ../data/ukb_heartmesh_processed/ctrl_mesh
+  seq_len:  50
+  n_training_frames: 49
+  n_points: 388
+  train_split: 0.8
+  scale: 1.0
+  filter_max_displacement: 50.0
+  smooth_sigma: 0
+
+
+train_dataset:
+  dataset_path: ""
+  dataset_list: ""
+  stage: deform
+  mode: diff
+  pc_size: 388
+  repeat: 1
+  seed: 42
+  n_sample_pro_model: 1
+  n_frames_interval: 1
+  n_training_frames: 49
+  batch_size: 12
+  overfit: false
+  norm_fac: 0
+  has_gravity: false
+  max_num_forces: 1

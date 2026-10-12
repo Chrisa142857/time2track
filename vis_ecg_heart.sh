@@ -21,18 +21,22 @@
 set -euo pipefail
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}   # caller may choose the GPU
 
-CONFIG=${2:-src/configs/config_ecg_heart.yaml}
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+# Paths given on the command line are relative to the caller's directory. Config fields
+# (output_dir, dataset paths, pretrained_path) are relative to src/, as in training.
+CONFIG=$(realpath -m "${2:-src/configs/config_ecg_heart.yaml}")
 
 # Resolve default checkpoint
 if [ -z "${1:-}" ]; then
-    OUTPUT_DIR=$(python3 -c "
+    OUTPUT_DIR=$(cd "${ROOT}/src" && python3 -c "
+import os
 from omegaconf import OmegaConf
 cfg = OmegaConf.load('${CONFIG}')
-print(cfg.output_dir)
+print(os.path.abspath(cfg.output_dir))
 ") || { echo "cannot read output_dir from ${CONFIG}" >&2; exit 1; }
     CHECKPOINT="${OUTPUT_DIR}/best_model"
 else
-    CHECKPOINT="$1"
+    CHECKPOINT=$(realpath -m "$1")
 fi
 
 N_SAMPLES=${3:-10}
@@ -41,7 +45,7 @@ N_SAMPLES=${3:-10}
 if [ -z "${4:-}" ]; then
     VIS_OUTPUT_DIR="$(dirname "${CHECKPOINT}")/vis_eval"
 else
-    VIS_OUTPUT_DIR="$4"
+    VIS_OUTPUT_DIR=$(realpath -m "$4")
 fi
 
 echo "=================================================="
@@ -55,10 +59,10 @@ echo "=================================================="
 mkdir -p "${VIS_OUTPUT_DIR}"
 
 # Change to src/ so relative imports resolve correctly
-cd "$(dirname "$0")/src"
+cd "${ROOT}/src"
 
 python vis_ecg_mesh.py \
-    --config              "../${CONFIG}"           \
+    --config              "${CONFIG}"           \
     --checkpoint          "${CHECKPOINT}"       \
     --output_dir          "${VIS_OUTPUT_DIR}"   \
     --n_samples           "${N_SAMPLES}"           \

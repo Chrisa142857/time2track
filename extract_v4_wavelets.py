@@ -5,14 +5,19 @@ For each (wavelet basis, low/high, lead-channel) we save one SVG showing the 24-
 filter coefficients. We also save one overlay SVG per (wavelet, low/high) showing all
 12 channels together for quick comparison against the initialization.
 """
+import argparse
 import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from safetensors import safe_open
 
-CKPT = '../nips26-physctrl-outputs/ecg_heart_delaywavev4_8L_256d_49frames/best_model/model.safetensors'
-OUT  = '../physctrl/v4_wavelet_templates'
+ap = argparse.ArgumentParser()
+ap.add_argument('--ckpt', default='nips26-physctrl-outputs/ecg_heart_delaywavev4_8L_256d_49frames/best_model/model.safetensors',
+                help='model.safetensors of a trained delaywavev4 run (default: download_ckpts.sh location)')
+ap.add_argument('--out', default='v4_wavelet_templates')
+a = ap.parse_args()
+CKPT, OUT = a.ckpt, a.out
 WAVELET_NAMES = ['db4', 'db6', 'sym4', 'coif2']  # from config
 KINDS = ['low', 'high']
 

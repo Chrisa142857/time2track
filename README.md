@@ -4,7 +4,7 @@
 
 Ziquan Wei, Tingting Dan, Guorong Wu. NeurIPS 2026.
 
-Project page: https://chrisa142857.github.io/time2track/
+Project page: https://chrisa142857.github.io/time2track/ · Paper: https://chrisa142857.github.io/time2track/paper/time2track_neurips2026.pdf
 
 ### Setup
 
@@ -13,11 +13,57 @@ uv sync
 ```
 
 Two encoders are imported from directories at the repository root that are not part of this
-repository: `TeCh/` (TeCh ECG encoder) and `PhysioWave/` (wavelet backbone). Link or copy them there
-before using the `tech`, `physiowave` or `delaywave*` encoders. The delaywave configs read the
-pretrained PhysioWave ECG weights from `pretrained_path` (default `../physctrl/PhysioWave/ecg.pth`,
-relative to `src/`). Dataset locations are config fields as well (`dataset.ecg_dir`,
-`dataset.npy_dir`, `dataset.mesh_dir`, relative to `src/`).
+repository. Clone them there before using the `tech`, `delay`, `physiowave` or `delaywave*` encoders:
+
+| Directory | Source | Commit used | Needed by |
+|---|---|---|---|
+| `TeCh/` | https://github.com/Levi-Ackman/TeCh | `9a378cc` | `tech`, `delay` (Delay-T, Delay-QRS) |
+| `PhysioWave/` | https://github.com/ForeverBlue816/PhysioWave | `6f7bec7` | `physiowave`, `delaywave*` |
+
+The `physiowave` and `delaywave*` configs read the pretrained PhysioWave ECG weights from
+`pretrained_path` (default `../PhysioWave/ecg.pth`, relative to `src/`). Download `ecg.pth` from the
+"Pretrained Models" link of the PhysioWave README and put it in `PhysioWave/`. Every path field of a
+config (`output_dir`, `pretrained_path`, `dataset.ecg_dir`, `dataset.npy_dir`, `dataset.mesh_dir`)
+is relative to `src/`.
+
+## Data
+
+The experiments use UK Biobank data under Application ID 91673. UK Biobank data are available to
+approved researchers at https://www.ukbiobank.ac.uk, so no subject data are distributed here.
+
+- **ECG.** Resting 12-lead ECG (field 20205) at 500 Hz, 600 samples per subject, z-normalized per
+  lead.
+- **4D heart meshes.** 388 control points over 50 frames per cardiac cycle (frame 0 is the rest
+  mesh), from the UK Biobank cardiac MR digital twins of Ugurlu et al., *PLOS ONE* 20(7): e0327158,
+  2025.
+
+`src/dataset/ukbiobank_dataset.py` reads either layout below. Subjects with both an ECG and a mesh
+are paired, subjects whose displacement from the rest mesh exceeds `dataset.filter_max_displacement`
+in more than `dataset.filter_max_noisy_frac` of their frames are dropped, and the remaining subjects
+are split into train and validation by `dataset.train_split` (0.8) with a fixed permutation (seed 42).
+
+```
+{dataset.ecg_dir}/{subid}.npy                  (12, 600) float32, z-normalized per lead
+{dataset.ecg_dir}/{subid}_2_0.csv              fallback: raw (12, 600), z-normalized on load
+{dataset.npy_dir}/{subid}_{...}/frames.npy     (50, 388, 3) float32 (dataset.mesh_dir if npy_dir is unset)
+{dataset.mesh_dir}/{subid}_{...}/frame_000.ply fallback: one ASCII PLY per frame
+```
+
+`data_prep/` builds this layout from the UK Biobank exports, together with the mesh template assets
+read by the metric scripts (`control_materials.npy`, `control_face.ply`, passed as `--mesh-info` or
+`--material_npy`) and the inter-lead delay matrix of the Delay-T and Delay-QRS baselines
+(`all_ecg_delay_matrix.npz`). See `data_prep/README.md` for the steps in order.
+
+## Pretrained weights
+
+```bash
+bash download_ckpts.sh
+```
+
+This downloads one 6.4 GB archive with the trained weights, config and training logs of Time2Track
+and of every baseline and ablation, and extracts it to `nips26-physctrl-outputs/<variant>/`, which is
+the `output_dir` of the matching config. Evaluation and visualization then find
+`<variant>/best_model` when the checkpoint argument is empty.
 
 ## Usage
 
@@ -40,8 +86,10 @@ bash eval_ecg_heart.sh "" src/configs/config_ecg_heart_delaywavev4.yaml -1
 ```
 
 Per-subject predictions are written to `npy_eval/{subid}_{pred,gt}.npy` in the directory that
-contains the checkpoint, and the metrics are appended to `$RESULTS_CSV` (default `eval_metrics.csv`
-in the same directory). Optional flags of `src/eval_ecg_mesh.py`, whose defaults reproduce the paper:
+contains the checkpoint, and geometric metrics (Chamfer and Hausdorff distances, among others) are
+appended to `$RESULTS_CSV` (default `eval_metrics.csv` in the same directory). The metrics of the
+paper are computed from the `npy_eval` files by `eval_vertex_multiscale.py` (see below). Optional
+flags of `src/eval_ecg_mesh.py`, whose defaults are the settings of the paper:
 
 | Flag | Effect |
 |---|---|
@@ -60,15 +108,33 @@ bash vis_ecg_heart.sh "" src/configs/config_ecg_heart_delaywavev4.yaml 10
 **Aggregate metrics across trained variants** (one folder per variant under `--root`):
 
 ```bash
-python eval_vertex_multiscale.py   --root <variants dir> --mesh-info <mesh asset dir> --out outputs
-python eval_facearea_multiscale.py --root <variants dir> --mesh-info <mesh asset dir> --out outputs
+python eval_vertex_multiscale.py   --root nips26-physctrl-outputs --mesh-info <mesh asset dir> --out outputs
+python eval_facearea_multiscale.py --root nips26-physctrl-outputs --mesh-info <mesh asset dir> --out outputs
 ```
 
-`--subject-list <txt>` restricts both scripts to a subgroup of subjects.
+`--subject-list <txt>` restricts both scripts to a subgroup of subjects. The whole-heart metrics of the
+paper are the `scale == whole` rows of `outputs/vertex_multiscale/metrics-avgstd_per_scale.csv`:
+
+| Paper | Column(s) |
+|---|---|
+| RV coefficient | `meanRV` |
+| RMSE | `predGtL2N_rom` |
+| PAR | `peakAmpR_rom` |
+| APCR | `xsubjPredRV` / `xsubjGTRV` |
+| APDR | `xsDistPred` / `xsDistGT` |
+
+The diversity columns use the `--max-xsubj-subjects` (default 128) validation subjects with the
+smallest subject ids.
 
 **Delay tokenization options** (`model_config.delaywavev3_encoder`): `ref_lead` selects the reference
 lead (default 1, lead II), and `ref_mode: full` feeds the full lead × lead × scale delay map instead
 of a single reference row (`extra_scale` rescales the learning rate of the added columns).
+
+## Reproducing the other results
+
+`reproduce/README.md` maps every result beyond Table 1 to a folder with its code and instructions:
+Fig. 1d, the error bars of Table 1, Tables 2 and 3, Fig. 7 (delay tokens in the sEMG decoders
+vemg2pose and EMGFormer) and Appendices A.6 and A.7.
 
 ## Repository tooling
 
@@ -85,6 +151,7 @@ of a single reference row (`extra_scale` rescales the learning rate of the added
 .
 ├── .env.example                   # Template for machine-specific roots read by paths.py
 ├── .githooks                      # pre-commit naming check and Git LFS hooks
+├── data_prep                      # UK Biobank exports -> dataset layout, mesh template assets, ECG delay matrix
 ├── download_ckpts.sh              # Download model weights of Time2Track
 ├── eval_ecg_heart.sh              # CMD for Time2Track eval given a config yaml
 ├── eval_facearea_multiscale.py    # Py for surface area metrics
@@ -94,12 +161,15 @@ of a single reference row (`extra_scale` rescales the learning rate of the added
 ├── example_ecg_gif                # Example of generated 4D heart motion using different methods (Time2Track is denoted by delaywavev4)
 ├── extract_v4_wavelets.py         # Get wavelet templates in Time2Track
 ├── libs                           # lib for MDM
+├── LICENSE
 ├── paths.py                       # Single source of file locations
+├── preliminary_ecg.ipynb          # Fig. 1a to 1c (ES timing, inter-lead T-wave delay, PhysCtrl volume curves)
 ├── plot_heart_surface_scores.py   # Py for plotting metrics on mesh model
 ├── plot_radar_per_material.py     # Py for plotting radar exp
 ├── plot_vertex_3d_trajectories.py # Py for plotting 3D trajectory per vertex
 ├── pyproject.toml
 ├── README.md
+├── reproduce                      # one folder per result beyond Table 1 (see reproduce/README.md)
 ├── requirements.txt
 ├── src
 │   ├── collect_ecg_delay_maps.py  # Py for extracting learned delay maps
@@ -120,6 +190,22 @@ of a single reference row (`extra_scale` rescales the learning rate of the added
 ├── vis_delaymap.ipynb             # notebook of learned delay map
 └── vis_ecg_heart.sh               # CMD for Time2Track visualizing
 ```
+
+## Citation
+
+```bibtex
+@inproceedings{wei2026time2track,
+  title     = {From Heartbeat to Cardiochoreography: A Mechanics Foundation Model for Individualized 4D Cardiac Motion Generation Conditioned on Electrophysiology},
+  author    = {Wei, Ziquan and Dan, Tingting and Wu, Guorong},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year      = {2026}
+}
+```
+
+## License
+
+The code of this repository is released under the MIT License (`LICENSE`). Third-party code under
+`libs/` and the external `TeCh/` and `PhysioWave/` repositories keep their own licenses.
 
 ## Acknowledgements
 
