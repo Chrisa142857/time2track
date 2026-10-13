@@ -6,7 +6,7 @@
 
 # ------ General --------------------------------------------------
 image_size: 128
-output_dir: ../nips26-physctrl-outputs/ecg_heart_physiowavenopool_${model_config.n_layers}L_${model_config.latent_dim}d_${dataset.n_training_frames}frames
+output_dir: ../checkpoints/ecg_heart_physiowavenopool_${model_config.n_layers}L_${model_config.latent_dim}d_${dataset.n_training_frames}frames
 seed: 42
 
 # ------ Training -------------------------------------------------

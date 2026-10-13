@@ -1,5 +1,5 @@
 [project]
-name = "physctrl"
+name = "time2track"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
@@ -31,6 +31,7 @@ dependencies = [
     "plyfile>=1.1.3",
     "pydantic>=2.12.5",
     "pymcubes>=0.1.6",
+    "pyvista>=0.47.3",
     "pywavelets>=1.8.0",
     "pyyaml>=6.0.3",
     "rembg>=2.0.69",

@@ -68,7 +68,7 @@ def curves(root, exp, nsamp):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--root", default=str(REPO / "nips26-physctrl-outputs"),
+    ap.add_argument("--root", default=str(REPO / "checkpoints"),
                     help="directory with <variant>/npy_eval/{subid}_{pred,gt}.npy")
     ap.add_argument("--csv", default=str(REPO / "outputs" / "vertex_multiscale" / "metrics-avgstd_per_scale.csv"),
                     help="metrics CSV of eval_vertex_multiscale.py on the same --root (reproduction check)")

@@ -8,8 +8,6 @@
 !/.gitignore
 !/.gitattributes
 !/.python-version
-!/.githooks/
-!/.env.example
 !/README.md
 !/LICENSE
 !/pyproject.toml
@@ -20,11 +18,6 @@
 !/*.ipynb
 !/src/
 !/libs/
-!/tools/
-/tools/*
-!/tools/check_naming.py
-!/tools/naming.ini
-!/tools/runmeta.py
 !/example_ecg_gif/
 !/data_prep/
 !/reproduce/
@@ -53,3 +46,5 @@ data_generation/
 /src/model/emg_joint*
 /*emg*.sh
 gen_whole_heart_table.py
+# local helper, not part of the release
+/paths.py

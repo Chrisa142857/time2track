@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Inference of Time2Track on a subject list, optionally with a replaced rest mesh.
 #
-# Usage: run_inference.sh <subject_list> <npy_dir> [extra args of src/eval_ecg_mesh_e5.py]
+# Usage: run_inference.sh <subject_list> <npy_dir> [extra args of src/eval_ecg_mesh_rest_override.py]
 #   population rest mesh:  run_inference.sh list.txt <root>/cohort_mean/npy_eval --init_pc_override cohort_mean_template.npy
 #   own rest mesh:         run_inference.sh list.txt <root>/subject_specific/npy_eval
 #
@@ -14,7 +14,7 @@ if [[ $# -lt 2 || $1 == -h || $1 == --help ]]; then sed -n '2,11p' "$0" | cut -c
 LIST=$(realpath "$1"); NPY=$(realpath -m "$2"); shift 2
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/../../.." && pwd)
 CONFIG=$(realpath "${CONFIG:-$REPO/src/configs/config_ecg_heart_delaywavev3.yaml}")
-CKPT=$(realpath "${CKPT:-$REPO/nips26-physctrl-outputs/ecg_heart_delaywavev3_8L_256d_49frames/best_model}")
+CKPT=$(realpath "${CKPT:-$REPO/checkpoints/ecg_heart_delaywavev3_8L_256d_49frames/best_model}")
 PY=${PYTHON:-python}
 read -ra GPU_IDS <<< "${GPUS:-0}"
 CHUNKS=$(mktemp -d)
@@ -25,7 +25,7 @@ cd "$REPO/src"   # config paths are relative to src/
 pids=()
 i=0
 for c in "$CHUNKS"/chunk_*; do
-  CUDA_VISIBLE_DEVICES=${GPU_IDS[$((i % ${#GPU_IDS[@]}))]} "$PY" eval_ecg_mesh_e5.py \
+  CUDA_VISIBLE_DEVICES=${GPU_IDS[$((i % ${#GPU_IDS[@]}))]} "$PY" eval_ecg_mesh_rest_override.py \
     --config "$CONFIG" --checkpoint "$CKPT" \
     --num_inference_steps 50 --guidance_scale 2.0 --eval_batch_size 16 \
     --subject_list "$c" --npy_dir "$NPY" "$@" &

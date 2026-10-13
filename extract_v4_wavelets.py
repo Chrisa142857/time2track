@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from safetensors import safe_open
 
 ap = argparse.ArgumentParser()
-ap.add_argument('--ckpt', default='nips26-physctrl-outputs/ecg_heart_delaywavev4_8L_256d_49frames/best_model/model.safetensors',
+ap.add_argument('--ckpt', default='checkpoints/ecg_heart_delaywavev4_8L_256d_49frames/best_model/model.safetensors',
                 help='model.safetensors of a trained delaywavev4 run (default: download_ckpts.sh location)')
 ap.add_argument('--out', default='v4_wavelet_templates')
 a = ap.parse_args()

@@ -11,7 +11,7 @@ The p0 column of Table 3 repeats the Ours row of Table 1, and Δ is p̂0 minus p
 | File | What it does |
 |---|---|
 | `build_template.py` | population-average rest mesh p̂0 (mean of the centred frame-0 meshes of the 32,369 training subjects) and a fixed 2,000-subject validation subsample (seed 123) |
-| `run_inference.sh` | Time2Track inference on the subsample with p̂0 in place of each subject's rest mesh, through `src/eval_ecg_mesh_e5.py --init_pc_override` |
+| `run_inference.sh` | Time2Track inference on the subsample with p̂0 in place of each subject's rest mesh, through `src/eval_ecg_mesh_rest_override.py --init_pc_override` |
 | `rest_mesh_bootstrap.py` | RV, PAR, \|APCR−1\|, \|APDR−1\| and RMSE of those predictions with a 1,000-draw bootstrap (seed 42) |
 
 The model and the ECG are unchanged and only the rest mesh fed to the model is replaced. The
@@ -22,7 +22,7 @@ template contains no validation subject.
 - The UK Biobank ECG and mesh data in the layout of the repository README, with the dataset paths of
   `src/configs/config_ecg_heart_delaywavev3.yaml` (relative to `src/`).
 - The released Time2Track weights (`bash download_ckpts.sh`):
-  `nips26-physctrl-outputs/ecg_heart_delaywavev3_8L_256d_49frames/best_model`.
+  `checkpoints/ecg_heart_delaywavev3_8L_256d_49frames/best_model`.
 - `PhysioWave/` and its `ecg.pth` at the repository root (see the repository README).
 
 ## Commands

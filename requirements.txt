@@ -46,3 +46,7 @@ easydict
 utils3d
 objaverse
 # git+https://github.com/asomoza/image_gen_aux.git
+neurokit2==0.2.13
+scikit-learn
+seaborn
+pyvista

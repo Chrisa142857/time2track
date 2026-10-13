@@ -267,7 +267,7 @@ def plot_vertex_row(vertex_id: int,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default="../nips26-physctrl-outputs")
+    ap.add_argument("--root", default="checkpoints")
     ap.add_argument("--out", default="outputs/vertex_3d_trajectories")
     ap.add_argument("--max-subjects", type=int, default=None,
                     help="Optional cap on subjects per experiment")

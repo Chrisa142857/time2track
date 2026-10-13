@@ -25,7 +25,7 @@ They come from the robustness analysis.
 ## Inputs
 
 1. Trained weights: `bash download_ckpts.sh` (repository root) extracts every variant to
-   `nips26-physctrl-outputs/<variant>/best_model`.
+   `checkpoints/<variant>/best_model`.
 2. Validation predictions of the seven Table 1 encoders, from the repository root:
 
    ```bash
@@ -36,11 +36,11 @@ They come from the robustness analysis.
    done
    ```
 
-   This writes `nips26-physctrl-outputs/<variant>/npy_eval/{subid}_{pred,gt}.npy` (sample seed 0).
+   This writes `checkpoints/<variant>/npy_eval/{subid}_{pred,gt}.npy` (sample seed 0).
 3. The metrics CSV, used by the reproduction check:
 
    ```bash
-   python eval_vertex_multiscale.py --root nips26-physctrl-outputs --mesh-info <mesh asset dir> --out outputs
+   python eval_vertex_multiscale.py --root checkpoints --mesh-info <mesh asset dir> --out outputs
    ```
 
 ## Command
@@ -49,7 +49,7 @@ They come from the robustness analysis.
 python reproduce/cardiac/error_bars/diversity_error_bars.py --out <out dir>/diversity_error_bars.json
 ```
 
-Defaults: `--root nips26-physctrl-outputs`, `--csv outputs/vertex_multiscale/metrics-avgstd_per_scale.csv`
+Defaults: `--root checkpoints`, `--csv outputs/vertex_multiscale/metrics-avgstd_per_scale.csv`
 (both relative to the repository root), `--nsamp 128`, `--B 10000`, `--seed 0`, and `--methods` the
 seven rows of Table 1 as `Label=variant_dir`.
 

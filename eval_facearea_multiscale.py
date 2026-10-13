@@ -42,7 +42,7 @@ from tqdm import tqdm
 _MP_CTX = _mp.get_context("spawn")
 
 dirname = 'npy_eval'
-_DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _DTYPE = torch.float32
 EPS = 1e-9
 _PROJ_CACHE: Dict[int, torch.Tensor] = {}
@@ -160,7 +160,7 @@ def _enumerate_tasks(root, subject_list=None):
             entries = sorted(e.name for e in os.scandir(d) if e.name.endswith("_pred.npy"))
         except FileNotFoundError:
             continue
-        if subject_list is not None:  # restrict to a subgroup (E1/E3)
+        if subject_list is not None:  # restrict to a subgroup
             entries = [e for e in entries if e[:-9] in subject_list]
         for fname in entries:
             sid = fname[:-9]
@@ -874,7 +874,7 @@ def write_metrics_csv(rows, path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default='../nips26-physctrl-outputs',
+    ap.add_argument("--root", default='checkpoints',
                     help="Directory containing per-experiment folders with {dirname}/*_{pred,gt}.npy")
     ap.add_argument("--mesh-info", default='../ukb_heart_mesh_visual',
                     help="Directory containing control_material_idmap.json, control_materials.npy, control_face.ply")
@@ -887,7 +887,7 @@ def main():
                     help="DataLoader workers for parallel npy loading")
     ap.add_argument("--subject-list", type=str, default=None,
                     help="Optional path to a txt file (one subid per line) to restrict to a "
-                         "subgroup (E1/E3). Use a fresh --tag so a stale area cache is not reused.")
+                         "subgroup. Use a fresh --tag so a stale area cache is not reused.")
     args = ap.parse_args()
     args.out = os.path.join(args.out, args.tag)
     os.makedirs(args.out, exist_ok=True)

@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 FILE_ID=${FILE_ID:-1s26T8W4wqP_FkHy4CndZyO77EQG8TtHT}   # model_weight_log.tar.gz in the folder above
-OUT=${OUT:-nips26-physctrl-outputs}                     # output_dir prefix of the configs, relative to the repo root
+OUT=${OUT:-checkpoints}                                 # output_dir prefix of the configs, relative to the repo root
 ARCHIVE="${OUT}/model_weight_log.tar.gz"
 
 mkdir -p "${OUT}"

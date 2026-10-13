@@ -12,6 +12,9 @@ Project page: https://chrisa142857.github.io/time2track/ · Paper: https://chris
 uv sync
 ```
 
+The example GIFs in `example_ecg_gif/` are stored with Git LFS: run `git lfs install` before cloning,
+or `git lfs pull` afterwards, to fetch them.
+
 Two encoders are imported from directories at the repository root that are not part of this
 repository. Clone them there before using the `tech`, `delay`, `physiowave` or `delaywave*` encoders:
 
@@ -61,7 +64,7 @@ bash download_ckpts.sh
 ```
 
 This downloads one 6.4 GB archive with the trained weights, config and training logs of Time2Track
-and of every baseline and ablation, and extracts it to `nips26-physctrl-outputs/<variant>/`, which is
+and of every baseline and ablation, and extracts it to `checkpoints/<variant>/`, which is
 the `output_dir` of the matching config. Evaluation and visualization then find
 `<variant>/best_model` when the checkpoint argument is empty.
 
@@ -108,8 +111,8 @@ bash vis_ecg_heart.sh "" src/configs/config_ecg_heart_delaywavev4.yaml 10
 **Aggregate metrics across trained variants** (one folder per variant under `--root`):
 
 ```bash
-python eval_vertex_multiscale.py   --root nips26-physctrl-outputs --mesh-info <mesh asset dir> --out outputs
-python eval_facearea_multiscale.py --root nips26-physctrl-outputs --mesh-info <mesh asset dir> --out outputs
+python eval_vertex_multiscale.py   --root checkpoints --mesh-info <mesh asset dir> --out outputs
+python eval_facearea_multiscale.py --root checkpoints --mesh-info <mesh asset dir> --out outputs
 ```
 
 `--subject-list <txt>` restricts both scripts to a subgroup of subjects. The whole-heart metrics of the
@@ -136,21 +139,10 @@ of a single reference row (`extra_scale` rescales the learning rate of the added
 Fig. 1d, the error bars of Table 1, Tables 2 and 3, Fig. 7 (delay tokens in the sEMG decoders
 vemg2pose and EMGFormer) and Appendices A.6 and A.7.
 
-## Repository tooling
-
-- `paths.py` is the single source of file locations for local experiment scripts. Machine-specific
-  roots are read from an untracked `.env` (template: `.env.example`).
-- `tools/runmeta.py` creates a local run directory, `experiments/YYYY.MM.DD-runNN_slug/`, and records
-  its code version, config, input hashes and environment.
-- `tools/check_naming.py` (rules in `tools/naming.ini`) checks artifact naming and run layout. Enable
-  it, together with the Git LFS hooks, with `git config core.hooksPath .githooks`.
-
 ## Codebase structure
 
 ```
 .
-├── .env.example                   # Template for machine-specific roots read by paths.py
-├── .githooks                      # pre-commit naming check and Git LFS hooks
 ├── data_prep                      # UK Biobank exports -> dataset layout, mesh template assets, ECG delay matrix
 ├── download_ckpts.sh              # Download model weights of Time2Track
 ├── eval_ecg_heart.sh              # CMD for Time2Track eval given a config yaml
@@ -162,7 +154,6 @@ vemg2pose and EMGFormer) and Appendices A.6 and A.7.
 ├── extract_v4_wavelets.py         # Get wavelet templates in Time2Track
 ├── libs                           # lib for MDM
 ├── LICENSE
-├── paths.py                       # Single source of file locations
 ├── preliminary_ecg.ipynb          # Fig. 1a to 1c (ES timing, inter-lead T-wave delay, PhysCtrl volume curves)
 ├── plot_heart_surface_scores.py   # Py for plotting metrics on mesh model
 ├── plot_radar_per_material.py     # Py for plotting radar exp
@@ -177,14 +168,13 @@ vemg2pose and EMGFormer) and Appendices A.6 and A.7.
 │   ├── dataset
 │   │   └── ukbiobank_dataset.py   # Dataset classes for UKB data
 │   ├── eval_ecg_mesh.py           # Py for Time2Track inference
-│   ├── eval_ecg_mesh_e5.py        # Inference variant whose --init_pc_override also takes a per-subject .npz of rest meshes
+│   ├── eval_ecg_mesh_rest_override.py # Inference variant whose --init_pc_override also takes a per-subject .npz of rest meshes
 │   ├── model
 │   │   └── ecg_mesh_model.py      # Model classes of Time2Track
 │   ├── pipeline_ecg.py            # Pipeline of ECG conditional motion diffusion
 │   ├── train_ecg_mesh.py          # Py for Time2Track training
 │   ├── utils                      # util codes
 │   ├── vis_ecg_mesh.py            # Py for .gif visualization of predictions from Time2Track
-├── tools                          # Run metadata (runmeta.py) and naming checks (check_naming.py, naming.ini)
 ├── train_ecg_heart.sh             # CMD for Time2Track training
 ├── uv.lock
 ├── vis_delaymap.ipynb             # notebook of learned delay map

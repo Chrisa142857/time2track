@@ -17,7 +17,7 @@ and is reported once per experiment on the `whole` row only.
 
 Usage
 -----
-  python eval_vertex_multiscale.py --root ../nips26-physctrl-outputs \
+  python eval_vertex_multiscale.py --root checkpoints \
          --mesh-info ../ukb_heart_mesh_visual
 """
 
@@ -67,7 +67,7 @@ def collect_pairs(root: str, max_subjects: Optional[int] = None,
             entries = sorted(e.name for e in os.scandir(d) if e.name.endswith("_pred.npy"))
         except FileNotFoundError:
             continue
-        if subject_list is not None:  # restrict to a subgroup (E1/E3); keeps sorted order
+        if subject_list is not None:  # restrict to a subgroup; keeps sorted order
             entries = [e for e in entries if e[:-9] in subject_list]
         if max_subjects is not None:
             entries = entries[:max_subjects]
@@ -564,7 +564,7 @@ def preload_gt_cache(results, gt_cache: dict, completed_experiments: Optional[se
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default='../nips26-physctrl-outputs',
+    ap.add_argument("--root", default='checkpoints',
                     help="Directory containing per-experiment folders with {dirname}/*_{pred,gt}.npy")
     ap.add_argument("--mesh-info", default='../ukb_heart_mesh_visual',
                     help="Directory containing control_material_idmap.json and control_materials.npy")
@@ -574,7 +574,7 @@ def main():
                     help="Optional debugging limit per experiment")
     ap.add_argument("--subject-list", type=str, default=None,
                     help="Optional path to a txt file (one subid per line) to restrict evaluation "
-                         "to a subgroup (E1/E3). Set --max-xsubj-subjects >= subgroup size for "
+                         "to a subgroup. Set --max-xsubj-subjects >= subgroup size for "
                          "matched-n pairwise diversity.")
     ap.add_argument("--max-xsubj-subjects", type=int, default=128,
                     help="Subject sample size for cross-subject diversity metrics")

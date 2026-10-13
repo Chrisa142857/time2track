@@ -34,7 +34,7 @@ dataset and DDIM pipeline from `src/`.
 ## Inputs
 
 1. Trained weights: `bash download_ckpts.sh` (repository root) extracts them to
-   `nips26-physctrl-outputs/ecg_heart_delaywavev3_8L_256d_49frames/best_model`.
+   `checkpoints/ecg_heart_delaywavev3_8L_256d_49frames/best_model`.
 2. The UK Biobank ECG and mesh data at the dataset paths of
    `src/configs/config_ecg_heart_delaywavev3.yaml` (see the main README).
 3. The unperturbed validation evaluation, which supplies the GT `{subid}_gt.npy`:
@@ -43,7 +43,7 @@ dataset and DDIM pipeline from `src/`.
    bash eval_ecg_heart.sh "" src/configs/config_ecg_heart_delaywavev3.yaml -1
    ```
 
-   This writes `nips26-physctrl-outputs/ecg_heart_delaywavev3_8L_256d_49frames/npy_eval/`.
+   This writes `checkpoints/ecg_heart_delaywavev3_8L_256d_49frames/npy_eval/`.
 4. Subgroup lists from `reproduce/cardiac/pathology/build_subgroups.py`, which writes
    `<lists dir>/<subgroup>.txt` (one subject id per line). Two are used:
    `any_cardiac.txt`, the diseased subgroup of Table 7 (ICD-10 I20 to I25 and I42 to I50, 981

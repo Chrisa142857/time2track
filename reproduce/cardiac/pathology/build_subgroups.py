@@ -33,7 +33,7 @@ def main():
     ap.add_argument("--icd-tsv", required=True,
                     help="UK Biobank tab-separated extract: first column eid, a column named p41270")
     ap.add_argument("--pred-dir",
-                    default=str(REPO / "nips26-physctrl-outputs" / "ecg_heart_delaywavev3_8L_256d_49frames" / "npy_eval"),
+                    default=str(REPO / "checkpoints" / "ecg_heart_delaywavev3_8L_256d_49frames" / "npy_eval"),
                     help="npy_eval directory whose *_pred.npy files define the evaluated subjects")
     ap.add_argument("--out", required=True, help="output directory for the lists")
     args = ap.parse_args()

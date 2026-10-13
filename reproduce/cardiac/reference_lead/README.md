@@ -15,7 +15,7 @@ Reproduces Appendix A.7 "Reference Lead" of the camera-ready paper:
 | 8 ms (IQR 2 to 30 ms) | `tpeak_delay_stats.py` |
 
 Common inputs: the trained weights from `bash download_ckpts.sh` (repository root), which land in
-`nips26-physctrl-outputs/ecg_heart_delaywavev3_8L_256d_49frames/best_model`, the UK Biobank data at
+`checkpoints/ecg_heart_delaywavev3_8L_256d_49frames/best_model`, the UK Biobank data at
 the dataset paths of `src/configs/config_ecg_heart_delaywavev3.yaml` (see the main README), and
 the unperturbed validation evaluation of the trained model:
 
@@ -23,7 +23,7 @@ the unperturbed validation evaluation of the trained model:
 bash eval_ecg_heart.sh "" src/configs/config_ecg_heart_delaywavev3.yaml -1
 ```
 
-which writes `nips26-physctrl-outputs/ecg_heart_delaywavev3_8L_256d_49frames/npy_eval/`. All
+which writes `checkpoints/ecg_heart_delaywavev3_8L_256d_49frames/npy_eval/`. All
 commands below run from the repository root.
 
 ## Table 9: retraining with aVR or aVL as the reference lead
@@ -39,7 +39,7 @@ of `src/configs/config_ecg_heart_delaywavev3.yaml` with only these changes:
 | `max_train_steps` / `num_train_epochs` | null / 200 | 12000 / 10000 (the step budget decides) |
 | `early_stop_patience` | 3 | 0 (no early stop, equal budget for every arm) |
 | `validation_steps` / `checkpoints_total_limit` | 500 / 5 | 250 / 3 |
-| `output_dir` | `../nips26-physctrl-outputs/ecg_heart_delaywavev3_...` | `../nips26-physctrl-outputs/reference_lead_<lead>` |
+| `output_dir` | `../checkpoints/ecg_heart_delaywavev3_...` | `../checkpoints/reference_lead_<lead>` |
 
 Everything else is the base recipe: seed 42, one GPU with batch 14 and gradient accumulation 4
 (56 samples per step, about 21 epochs in 12,000 steps), learning rate 1e-5 with cosine schedule and
@@ -49,12 +49,12 @@ Everything else is the base recipe: seed 42, one GPU with batch 14 and gradient 
 ```bash
 for lead in aVR aVL; do
   CUDA_VISIBLE_DEVICES=0 bash train_ecg_heart.sh 1 reproduce/cardiac/reference_lead/configs/ref_${lead}.yaml
-  bash eval_ecg_heart.sh nips26-physctrl-outputs/reference_lead_${lead}/checkpoint-12000 \
+  bash eval_ecg_heart.sh checkpoints/reference_lead_${lead}/checkpoint-12000 \
        reproduce/cardiac/reference_lead/configs/ref_${lead}.yaml -1
 done
 python reproduce/cardiac/reference_lead/score_arms.py \
-  --dir aVR=nips26-physctrl-outputs/reference_lead_aVR/npy_eval \
-  --dir aVL=nips26-physctrl-outputs/reference_lead_aVL/npy_eval \
+  --dir aVR=checkpoints/reference_lead_aVR/npy_eval \
+  --dir aVL=checkpoints/reference_lead_aVL/npy_eval \
   --out <out dir>/reference_lead_scores.json
 ```
 

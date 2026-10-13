@@ -39,7 +39,7 @@ Subgroups are matched code by code against UK Biobank field 41270 (all ICD-10 di
    done
    ```
 
-   This writes `nips26-physctrl-outputs/<variant>/npy_eval/{subid}_{pred,gt}.npy`.
+   This writes `checkpoints/<variant>/npy_eval/{subid}_{pred,gt}.npy`.
 
 ## Commands
 
@@ -49,8 +49,8 @@ python reproduce/cardiac/pathology/subgroup_metrics.py --lists <lists> --out <ou
 python reproduce/cardiac/pathology/pathology_table.py <out dir>/subgroup_metrics.json
 ```
 
-Defaults: `build_subgroups.py --pred-dir nips26-physctrl-outputs/ecg_heart_delaywavev3_8L_256d_49frames/npy_eval`
-(the evaluated subjects), `subgroup_metrics.py --root nips26-physctrl-outputs --ndraws 1000 --seed 0`,
+Defaults: `build_subgroups.py --pred-dir checkpoints/ecg_heart_delaywavev3_8L_256d_49frames/npy_eval`
+(the evaluated subjects), `subgroup_metrics.py --root checkpoints --ndraws 1000 --seed 0`,
 `--variants Ours=... CNN=... TeCh=...` (the first variant also supplies the GT files) and all seven
 subgroups, `pathology_table.py --subgroup any_cardiac`. Relative defaults are resolved against the
 repository root.

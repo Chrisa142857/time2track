@@ -123,7 +123,7 @@ def main(args):
         model_config=args.model_config,
     )
 
-    # ── Warm start (E7b): load model weights only from an existing accelerate
+    # ── Warm start: load model weights only from an existing accelerate
     # checkpoint dir, leaving optimizer + LR schedule fresh.  Unlike
     # `resume_from_checkpoint` (which must live inside output_dir and also
     # restores the end-of-cosine LR ≈ 0), this lets a converged checkpoint be
@@ -132,7 +132,7 @@ def main(args):
     if warm:
         from safetensors.torch import load_file
         _sd = load_file(os.path.join(warm, 'model.safetensors'))
-        # E7d: ref_mode='full' widens delay_mlp.0 from max_level to n_leads*max_level
+        # ref_mode='full' widens delay_mlp.0 from max_level to n_leads*max_level
         # columns. Scatter the single-reference weights into THEIR reference's column
         # block and zero every other reference, so the full-map model is numerically
         # IDENTICAL to the shipped single-reference one at step 0. Any later difference
@@ -159,7 +159,7 @@ def main(args):
                     f'missing={list(missing)} unexpected={list(unexpected)}')
         assert not missing and not unexpected, 'warm-start state_dict mismatch'
 
-    # ── E7b progress readout: has the delay branch actually re-converged? ──
+    # ── Progress readout: has the delay branch actually re-converged? ──
     # Snapshot the warm-start weights so we can report how far each branch has
     # travelled.  Without this a short fine-tune is indistinguishable from a
     # long one and "metrics unchanged" is unfalsifiable.
@@ -425,7 +425,7 @@ def main(args):
                             f'val_error={val_error:.6f}'
                         )
                         logger.info(
-                            f'[E7b] step={global_step} alpha_delay={_a:.6e} '
+                            f'step={global_step} alpha_delay={_a:.6e} '
                             f'delay_drift={_dd:.4e} morph_drift={_md:.4e} '
                             f'val_loss={val_loss:.6f} val_error={val_error:.6f} '
                             f'lr={lr_scheduler.get_last_lr()[0]:.3e}'
@@ -464,7 +464,7 @@ def main(args):
                 'lr':          lr_scheduler.get_last_lr()[0],
                 'val_loss':    last_val_loss,
                 'val_error':   last_val_error,
-                'alpha_delay': _alpha_delay(),   # E7b: dense gate trajectory
+                'alpha_delay': _alpha_delay(),   # dense gate trajectory
             })
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)

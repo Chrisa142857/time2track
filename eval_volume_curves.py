@@ -32,7 +32,7 @@ Also writes:
 
 Usage
 -----
-  python eval_volume_curves.py --root ../nips26-physctrl-outputs
+  python eval_volume_curves.py --root checkpoints
 """
 
 from __future__ import annotations

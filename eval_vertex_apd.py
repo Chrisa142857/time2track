@@ -543,7 +543,7 @@ def run_apd_pipeline(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default="../nips26-physctrl-outputs")
+    ap.add_argument("--root", default="checkpoints")
     ap.add_argument("--mesh", default="../ukb_heart_mesh_visual/control_face.ply")
     ap.add_argument("--out", default="outputs/vertex_apd")
     ap.add_argument("--max-subjects", type=int, default=None)

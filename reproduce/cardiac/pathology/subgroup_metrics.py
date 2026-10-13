@@ -45,7 +45,7 @@ def pctl(arr):  # arr [ndraws, 5] -> per-metric [median, lo, hi]
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--lists", required=True, help="directory written by build_subgroups.py")
-    ap.add_argument("--root", default=str(REPO / "nips26-physctrl-outputs"),
+    ap.add_argument("--root", default=str(REPO / "checkpoints"),
                     help="directory with <variant>/npy_eval/{subid}_{pred,gt}.npy")
     ap.add_argument("--variants", nargs="+", default=VARIANTS, metavar="LABEL=VARIANT")
     ap.add_argument("--subgroups", nargs="+", default=SUBGROUPS)

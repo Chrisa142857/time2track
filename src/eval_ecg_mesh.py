@@ -305,7 +305,7 @@ def main(args):
     else:
         raise FileNotFoundError(f'No model weights found in {ckpt_dir}')
 
-    # E13: override the delay-token gate before sampling (smoke-tested).
+    # Optional override of the delay-token gate before sampling.
     if args.alpha_delay_override is not None:
         enc = model.ecg_encoder
         assert hasattr(enc, 'alpha_delay'), f'{type(enc).__name__} has no alpha_delay'
@@ -313,14 +313,14 @@ def main(args):
         with torch.no_grad():
             enc.alpha_delay.fill_(float(args.alpha_delay_override))
         new = float(enc.alpha_delay.detach())
-        print(f'[E13] alpha_delay override: {old:.6e} -> {new:.6e}')
+        print(f'alpha_delay override: {old:.6e} -> {new:.6e}')
         assert abs(new - float(args.alpha_delay_override)) < 1e-5, 'override did not take'  # float32 tol
 
-    # E13: swap delay tokens across subjects (keeps trained alpha) — tests whether
+    # Optional swap of delay tokens across subjects (keeps trained alpha) — tests whether
     # the delay branch carries subject-specific information on-distribution.
     if args.shuffle_delay:
         model.ecg_encoder.shuffle_delay = True
-        print('[E13] shuffle_delay ON: delay branch reads other subjects\' ECG')
+        print('shuffle_delay ON: delay branch reads other subjects\' ECG')
 
     model.to(device)
     model.eval()
@@ -329,16 +329,16 @@ def main(args):
     # ── Dataset ──────────────────────────────────────────────────────────
     val_dataset = UKbiobankHeartMesh('val', cfg.dataset)
 
-    # E5: restrict inference to a subject subset (keeps dataset order).
+    # Optional restriction of inference to a subject subset (keeps dataset order).
     if args.subject_list:
         with open(args.subject_list) as f:
             keep = {ln.strip() for ln in f if ln.strip()}
         before = len(val_dataset.subjects)
         val_dataset.subjects = [s for s in val_dataset.subjects if s[0] in keep]
-        print(f'[E5] subject_list: kept {len(val_dataset.subjects)}/{before} '
+        print(f'subject_list: kept {len(val_dataset.subjects)}/{before} '
               f'(requested {len(keep)})')
 
-    # E5: fixed template rest mesh substituted for p0 for ALL subjects.
+    # Optional fixed template rest mesh substituted for p0 for ALL subjects.
     init_pc_override = None
     tmpl_scale = None
     if args.init_pc_override:
@@ -347,7 +347,7 @@ def main(args):
             t = t[0]
         init_pc_override = torch.from_numpy(t).to(device)       # (N,3)
         tmpl_scale = init_pc_override.pow(2).sum(-1).mean().sqrt()
-        print(f'[E5] init_pc_override: {args.init_pc_override} shape={tuple(t.shape)} '
+        print(f'init_pc_override: {args.init_pc_override} shape={tuple(t.shape)} '
               f'rms_scale={float(tmpl_scale):.4f} '
               f'scale_by_subject={args.init_pc_scale_by_subject}')
 
@@ -483,7 +483,7 @@ def main(args):
             if delay_mat is not None:
                 delay_mat = delay_mat.to(device)
 
-            # E5: substitute a fixed template p0 for every subject (ECG/GT unchanged).
+            # Substitute a fixed template p0 for every subject (ECG/GT unchanged).
             src_used = src
             if init_pc_override is not None:
                 N = src.shape[-2]
@@ -664,28 +664,28 @@ if __name__ == '__main__':
                         help='Directory to dump encoder diagnostics (templates, '
                              'delta matrices, phi*, cycles). Only active when '
                              'the encoder is ECGLocalizedDelayEncoder.')
-    # ── E5 p0 ablation hooks ─────────────────────────────────────────────
+    # ── Rest-mesh and delay-branch options ──────────────────────────────
     parser.add_argument('--subject_list',         type=str,   default=None,
                         help='Optional txt file (one subid per line) to restrict '
-                             'inference to a subject subset (E5 2000-subsample).')
+                             'inference to a subject subset.')
     parser.add_argument('--init_pc_override',      type=str,   default=None,
                         help='Optional .npy (N,3) or (1,N,3) template rest mesh to '
                              'substitute for the subject-specific p0 for ALL '
-                             'subjects (E5). ECG + GT stay subject-specific.')
+                             'subjects. ECG + GT stay subject-specific.')
     parser.add_argument('--alpha_delay_override',  type=float, default=None,
-                        help='E13: force ecg_encoder.alpha_delay to this value '
+                        help='Force ecg_encoder.alpha_delay to this value '
                              'after loading the checkpoint (0.0 = delay tokens off, '
                              '1.0 = ungated). Default None = keep trained value.')
     parser.add_argument('--shuffle_delay',         action='store_true',
-                        help='E13: feed the delay branch other subjects\' ECG '
+                        help='Feed the delay branch other subjects\' ECG '
                              '(within-batch roll) at the trained alpha, to test '
                              'whether delay tokens carry subject-specific info.')
     parser.add_argument('--init_pc_scale_by_subject', action='store_true',
                         help='If set with --init_pc_override, scale the template '
                              'per-subject by (subject rest RMS-scale / template '
-                             'RMS-scale): a cheap size-only p0 proxy (E5 cond b).')
+                             'RMS-scale): a cheap size-only p0 proxy.')
     parser.add_argument('--sample_seed',            type=int,   default=0,
-                        help='E7b: DDIM sampling seed (was hardcoded 0). A subject '
+                        help='DDIM sampling seed. A subject '
                              'bootstrap cannot see sampling-seed noise, so a second '
                              'seed is needed to put a real floor under PAR/RV/|APCR-1|.')
     parser.add_argument('--eval_batch_size',       type=int,   default=None,

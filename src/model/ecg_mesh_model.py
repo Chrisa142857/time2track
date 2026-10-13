@@ -1552,7 +1552,7 @@ class DelayWaveECGEncoderV2(nn.Module):
     def forward(self, ecg: torch.Tensor, return_aux: bool = False):
         """ecg: (B, n_leads, seq_len) → (B, 1 + n_morph_tokens, latent_dim)."""
         morph_tokens = self._morph_tokens(ecg)
-        # E13: if shuffle_delay is set, compute the delay branch from other subjects'
+        # If shuffle_delay is set, compute the delay branch from other subjects'
         # ECG (cyclic within-batch roll) while morphology stays subject-correct — an
         # on-distribution test of whether the delay tokens carry subject-specific info.
         ecg_delay = torch.roll(ecg, 1, 0) if getattr(self, 'shuffle_delay', False) else ecg
@@ -1591,7 +1591,7 @@ class DelayWaveECGEncoderV3(nn.Module):
         n_leads:              int   = 12,
         ref_lead:             int   = 1,
         # 'single' (paper): each lead's delay is measured against ref_lead only, so a
-        # token carries max_level numbers. 'full' (E7d): every lead is cross-correlated
+        # token carries max_level numbers. 'full': every lead is cross-correlated
         # against EVERY other, so lead c's token carries its lag against all n_leads
         # references at all max_level scales -- the whole n_leads x n_leads x max_level
         # map rather than one row of it. Token COUNT is unchanged; only what each token
@@ -1889,7 +1889,7 @@ class DelayWaveECGEncoderV3(nn.Module):
     def forward(self, ecg: torch.Tensor, return_aux: bool = False):
         """ecg: (B, n_leads, seq_len) → (B, 1 + n_morph_tokens, latent_dim)."""
         morph_tokens = self._morph_tokens(ecg)
-        # E13: if shuffle_delay is set, compute the delay branch from other subjects'
+        # If shuffle_delay is set, compute the delay branch from other subjects'
         # ECG (cyclic within-batch roll) while morphology stays subject-correct — an
         # on-distribution test of whether the delay tokens carry subject-specific info.
         ecg_delay = torch.roll(ecg, 1, 0) if getattr(self, 'shuffle_delay', False) else ecg
@@ -2224,7 +2224,7 @@ class DelayWaveECGEncoderV4(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# E17 — additional temporal foundation models as conditioning encoders
+# Additional temporal foundation models as conditioning encoders
 #
 # Every encoder below emits **12 tokens x latent_dim**: one per ECG lead where
 # the architecture keeps lead identity, otherwise an adaptive average pool of
@@ -2651,7 +2651,7 @@ class ECGCondMDM(nn.Module):
             )
             self.n_ecg_tokens = self.ecg_encoder.n_tokens
         elif ecg_encoder_type in ('patchtst', 'itransformer', 'medformer'):
-            # E17 — additional temporal transformers from the Medformer MedTS
+            # Additional temporal transformers from the Medformer MedTS
             # benchmark (the very set TeCh is benchmarked against).
             self.ecg_encoder = MedformerFamilyECGEncoder(
                 ecg_encoder_type,
