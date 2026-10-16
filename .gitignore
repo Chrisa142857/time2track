@@ -21,6 +21,7 @@
 !/example_ecg_gif/
 !/data_prep/
 !/reproduce/
+!/assets/
 
 # Inside re-included directories: caches and heavy or generated files stay out.
 __pycache__/
@@ -48,3 +49,5 @@ data_generation/
 gen_whole_heart_table.py
 # local helper, not part of the release
 /paths.py
+# shipped assets of generate_4d_heart.py (population-average rest mesh, mesh faces)
+!/assets/*.npy

@@ -6,14 +6,73 @@ Ziquan Wei, Tingting Dan, Guorong Wu. NeurIPS 2026.
 
 Project page: https://chrisa142857.github.io/time2track/ · Paper: https://chrisa142857.github.io/time2track/paper/time2track_neurips2026.pdf
 
-### Setup
+## How to use
+
+Generate the 4D motion of a heart from a resting 12-lead ECG, with or without a 3D mesh of that heart.
+
+**1. Install.** From the repository root:
+
+```bash
+uv sync
+git clone https://github.com/ForeverBlue816/PhysioWave && git -C PhysioWave checkout 6f7bec7
+```
+
+**2. Download the trained weights** (6.4 GB, extracted to `checkpoints/`):
+
+```bash
+bash download_ckpts.sh
+```
+
+**3. Generate.** A GPU is used when available (about 5 s of sampling per ECG on one H100, after the model loads).
+
+```bash
+# ECG only: the rest mesh is the population-average heart (assets/population_rest_mesh.npy)
+python generate_4d_heart.py --ecg my_ecg.xml --out results/
+
+# ECG + your own rest mesh (388-point control mesh at end-diastole, .ply or .npy)
+python generate_4d_heart.py --ecg my_ecg.csv --fs 500 --rest-mesh my_heart.ply --out results/
+
+# many subjects: a folder of ECGs and, optionally, a folder of meshes named like the ECGs
+python generate_4d_heart.py --ecg ecgs/ --rest-mesh meshes/ --out results/
+```
+
+- **Two modes.** With `--rest-mesh`, the motion starts from your own heart shape. Without it, the
+  motion starts from the population-average shape of the 32,369 UK Biobank training subjects, so the
+  generated motion follows the ECG while the heart shape is the population average.
+- **ECG input.** A GE MUSE XML as exported by UK Biobank (field 20205), or a 12 x T array (`.npy`,
+  `.csv`, `.txt`) in the lead order I, II, III, aVR, aVL, aVF, V1 to V6, with its sampling rate in
+  `--fs`. A CSV with lead names in its header is reordered by name. A recording of at most 1.4 s is
+  treated as a median beat. A longer recording is treated as a rhythm strip, and its R-aligned beats
+  are combined into a median beat. `--ecg-kind median|rhythm` overrides this choice, and
+  `--ecg-kind ready` accepts an input that is already preprocessed (12 x 600), such as the output of
+  `data_prep/`.
+- **ECG preprocessing.** The script applies the preprocessing of training: resampling to 500 Hz, 600
+  samples, the R-peak at sample 0 and z-normalization per lead. The model was trained on the 500 Hz
+  median beats of UK Biobank, so the median beat of an ECG device is the input closest to the
+  training data.
+- **Rest mesh input.** The end-diastolic control mesh of the biv-volumetric-meshing pipeline: 388
+  vertices in millimetres, in the coordinate frame of the UK Biobank meshes of Ugurlu et al. Use the
+  PLY format of `data_prep/mesh_to_ply.py`, or a `.npy` of shape (388, 3). The mesh is centred on its
+  centroid, as in training.
+- **Outputs.** For each ECG, `<name>_motion.npy` holds 50 x 388 x 3 coordinates: the rest mesh,
+  then the 49 generated frames of one cardiac cycle. `<name>.gif` animates the cycle,
+  `<name>_ecg_input.npy` holds the preprocessed ECG, `--ply` adds one PLY mesh per frame, and
+  `generation_config.json` records every setting of the run.
+- **Model and sampling.** `--config` selects the model, by default `config_ecg_heart_delaywavev3.yaml`,
+  whose weights `download_ckpts.sh` places under `checkpoints/` (`--checkpoint` points to other
+  weights). Sampling uses 50 DDIM steps and a guidance scale of 2.0, as in the paper. The output is a
+  sample of a diffusion model, so it changes with `--seed`, and also with `--batch-size` because the
+  noise is drawn per batch. The default batch size of 1 keeps every subject independent of the others.
+  Running several seeds shows the range of plausible motions for one ECG.
+
+## Setup for training and evaluation
 
 ```
 uv sync
 ```
 
 The example GIFs in `example_ecg_gif/` are stored with Git LFS: run `git lfs install` before cloning,
-or `git lfs pull` afterwards, to fetch them.
+or `git lfs pull` afterwards, to fetch the GIFs.
 
 Two encoders are imported from directories at the repository root that are not part of this
 repository. Clone them there before using the `tech`, `delay`, `physiowave` or `delaywave*` encoders:
@@ -68,7 +127,7 @@ and of every baseline and ablation, and extracts it to `checkpoints/<variant>/`,
 the `output_dir` of the matching config. Evaluation and visualization then find
 `<variant>/best_model` when the checkpoint argument is empty.
 
-## Usage
+## Training and evaluation
 
 **Train.** `NUM_GPUS` selects `src/configs/acc/<NUM_GPUS>gpu.yaml` (1, 2, 4, 7 or 8 GPUs), and the GPU
 ids come from `CUDA_VISIBLE_DEVICES` (default: the first `NUM_GPUS` devices).
@@ -78,7 +137,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 bash train_ecg_heart.sh 4 src/configs/config_ecg_he
 ```
 
 The best checkpoint (lowest validation denoising loss) is saved as
-`<output_dir>/best_val-loss<L>_step<N>/`, and `<output_dir>/best_model` links to it. Periodic
+`<output_dir>/best_val-loss<L>_step<N>/`, and `<output_dir>/best_model` links to that checkpoint. Periodic
 checkpoints are saved as `<output_dir>/checkpoint-<step>/`.
 
 **Evaluate.** Arguments are `[CHECKPOINT] [CONFIG] [NUM_VAL_BATCHES]`. An empty checkpoint means
@@ -143,6 +202,7 @@ vemg2pose and EMGFormer) and Appendices A.6 and A.7.
 
 ```
 .
+├── assets                         # Population-average rest mesh and control-mesh faces for generate_4d_heart.py
 ├── data_prep                      # UK Biobank exports -> dataset layout, mesh template assets, ECG delay matrix
 ├── download_ckpts.sh              # Download model weights of Time2Track
 ├── eval_ecg_heart.sh              # CMD for Time2Track eval given a config yaml
@@ -152,6 +212,7 @@ vemg2pose and EMGFormer) and Appendices A.6 and A.7.
 ├── eval_volume_curves.py          # Py for convex volume metrics (unused)
 ├── example_ecg_gif                # Example of generated 4D heart motion using different methods (Time2Track is denoted by delaywavev4)
 ├── extract_v4_wavelets.py         # Get wavelet templates in Time2Track
+├── generate_4d_heart.py           # 4D heart motion from your own ECG (with or without your rest mesh)
 ├── libs                           # lib for MDM
 ├── LICENSE
 ├── preliminary_ecg.ipynb          # Fig. 1a to 1c (ES timing, inter-lead T-wave delay, PhysCtrl volume curves)

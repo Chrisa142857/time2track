@@ -107,6 +107,28 @@ def get_cmr_hr(subj_cmrhr, eid_value, insid):
     return tgt_val[~tgt_val.isna()].mean()
 
 
+def consensus_r_peak(signals, sr):
+    """Consensus R-peak index of a (n_leads, n_samples) beat: NeuroKit2 ecg_clean + ecg_peaks
+    ('neurokit') on every lead, first R-peak per lead, median across leads. Falls back to the
+    argmax of the lead with the largest amplitude range when no lead yields a peak."""
+    r_peak_votes = []
+    for i in range(signals.shape[0]):
+        try:
+            lead_clean = nk.ecg_clean(signals[i].astype(float), sampling_rate=sr, method='neurokit')
+            _, info = nk.ecg_peaks(lead_clean, sampling_rate=sr, method='neurokit')
+            r_peaks = info['ECG_R_Peaks']
+            if len(r_peaks) > 0:
+                r_peak_votes.append(int(r_peaks[0]))
+        except Exception:
+            continue
+
+    if len(r_peak_votes) > 0:
+        return int(np.median(r_peak_votes))
+    # Fallback: argmax on the lead with the largest amplitude range
+    lead_idx = int(np.argmax(signals.max(axis=1) - signals.min(axis=1)))
+    return int(np.argmax(signals[lead_idx]))
+
+
 def process_and_map_ecg_to_mri(xml_path, mri_hr):
     """
     Shift ECG data and return a stretched time axis to temporally align with
@@ -139,25 +161,7 @@ def process_and_map_ecg_to_mri(xml_path, mri_hr):
     hr_ecg, sample_rate = get_ecg_metadata(xml_path)
 
     # Shift: multi-lead voting for R-peak
-    sr = int(sample_rate)
-    r_peak_votes = []
-    for i in range(len(leads)):
-        try:
-            lead_clean = nk.ecg_clean(signals[i].astype(float), sampling_rate=sr, method='neurokit')
-            _, info = nk.ecg_peaks(lead_clean, sampling_rate=sr, method='neurokit')
-            r_peaks = info['ECG_R_Peaks']
-            if len(r_peaks) > 0:
-                r_peak_votes.append(int(r_peaks[0]))
-        except Exception:
-            continue
-
-    if len(r_peak_votes) > 0:
-        r_peak_idx = int(np.median(r_peak_votes))
-    else:
-        # Fallback: argmax on the lead with the largest amplitude range
-        lead_idx = int(np.argmax(signals.max(axis=1) - signals.min(axis=1)))
-        r_peak_idx = int(np.argmax(signals[lead_idx]))
-
+    r_peak_idx = consensus_r_peak(signals, int(sample_rate))
     signals = np.roll(signals, -r_peak_idx, axis=1)
 
     # Stretch via time axis: map n_samples onto one CMR cardiac cycle
